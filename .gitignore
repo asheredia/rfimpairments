@@ -1,0 +1,9 @@
+# Archivos temporales de MATLAB
+*.asv
+*.fig
+*.log
+*.tmp
+*.mat
+
+# Carpetas a ignorar
+/results/
