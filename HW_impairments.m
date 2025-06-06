@@ -1,157 +1,286 @@
-%% ---------------------HARDWARE IMPAIRMENTS-----------------------
-clear all; close all;
-
-% Cargar señal
-signal = load('MR_OFDM1_MCS0_v1.mat');
-input_tx = signal.MR_OFDM1_MCS0_v1;
-fs = 2e6;
-
-%% -----------------Parametros de simulacion--------------------
-ppm = 2; % PPM para CFO
-fc = 915e6; % Frecuencia portadora
-offset = fc * ppm * 1e-6; % CFO en Hz
-ampImb = 1; % Desbalance de Amplitud (dB)
-phImb = 5; % Desbalance de fase (º)
-phNzLevel = -85; % Nivel de ruido de fase (dBc/Hz)
-pnHzFreqOff = 1e3; % Offset de frecuencia para ruido de fase (Hz)
-
-% Aplicar hardware impairments
-rx_cfo = frequencyOffset(input_tx, fs, offset); % CFO
-rx_iqi = iqimbal(input_tx, ampImb, phImb); % IQ imbalance
-pnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
-rx_pn = pnoise(input_tx); % Phase noise
-
-%% Visualizar efectos en el dominio de frecuencia y tiempo
-indices = 1:500; % Estandarizar índices para graficar
+%% HARDWARE IMPAIRMENTS
+% cargar archivo de señal en formato MAT
+clear all
+signal = load('LoRa_SF12_v1.mat');
+input_tx = signal.LoRa_SF12_v1;
+fs = 2e6; % 2 Msps
+mascara = find(abs(input_tx)>=0.005);
+%% FFT
+L = length(input_tx);
+% N = 1024;
+% win = hann(N);
+% hop = N;
+% n_b = floor((length(input_tx) - N)/ hop);
+% S = zeros(N, 1, 'single');
+% for k = 1:n_b-1
+%     idx = (k-1)*hop + (1:N);
+%     x_win = input_tx(idx) .* win.';
+%     X = fftshift(fft(x_win, N));
+%     S = S + abs(X).^2;
+% end
+% S = S / n_b;
+% S_dB = 10*log10(S);
+frecuencias = fs/L*(-L/2:L/2-1);
+x = input_tx;
+X = fftshift(fft(x)); % fft centrada
+plot(frecuencias/1e6, 20*log10(abs(X)), LineWidth=2)
+%% Welch
+[pxx, fr] = pwelch(input_tx,1024,512,1024,fs,"centered","psd");
+plot(fr, 10*log10(pxx)+30);
+xlabel("Frecuencia (MHz)");
+ylabel("PSD (dBm/Hz)");
+title("Densidad espectral de potencia");
+grid on;
+%% ---------------CARRIER FRECUENCY OFFSET-------------------
+fc=915e6;
+% offset = 100e3; % frecuencia en Hz
+ppm = 20; % Si tenemos el argumento en partes por millon
+offset = fc*ppm*1e-6;
+disp(['offset de ', num2str(offset), ' Hz'])
+rx_cfo = frequencyOffset(input_tx, fs, offset);
+sascope = spectrumAnalyzer(SampleRate=fs, FrequencySpan="full", ...
+    SpectrumType="power-density",...
+    SpectrumUnits="dBm",...
+    Method="welch",...
+    FrequencyResolutionMethod="rbw",...
+    RBWSource="property",RBW=50,...
+    ShowLegend=true, ChannelNames=["Input signal", "Frequency offset signal"]);
+%% frequency domain signals
+sascope(input_tx, rx_cfo);
+release(sascope);
+%% time domain signal
+indices = 1:500;
+t = indices/fs;
+input = input_tx(mascara);
+output = rx_cfo(mascara);
+figure;
+subplot(2,2,1);
+plot(t*1e3, real(input(indices)));
+hold on;
+plot(t*1e3, imag(input(indices)));
+title("Señal original");
+xlabel("Tiempo (ms)")
+subplot(2,2,3);
+plot(t*1e3, real(output(indices)));
+hold on;
+plot(t*1e3, imag(output(indices)));
+title("Señal con CFO");
+xlabel("Tiempo (ms)")
+% ver las fases de la señal
+% figure;
+subplot(2,2,2);
+plot(t*1e3, angle(input(indices)));
+title("Señal original - fase");
+xlabel("Tiempo (ms)")
+subplot(2,2,4);
+plot(t*1e3, angle(output(indices)));
+title("Señal con CFO - fase");
+xlabel("Tiempo (ms)")
+%% ---------------IQ IMBALANCE---------------
+ampImb = 5;
+phImb = 10;
+rx_iqi = iqimbal(input_tx, ampImb, phImb);
+spectrum = spectrumAnalyzer(...
+    SampleRate=fs,...
+    SpectrumUnits="dBm",...
+    Method='welch',...
+    RBWSource="Property", ...
+    RBW=50, ...
+    ShowLegend=true, ChannelNames=["Input signal", "IQ imbalanced signal"]);
+%% frequency domain signals
+spectrum(input_tx, rx_iqi);
+release(spectrum);
+%% time domain signal
+indices = 10001:10500;
 t = indices/fs;
 mascara = find(abs(input_tx)>=0.005);
 input = input_tx(mascara);
-%% CFO
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'Frequency offset signal'};
-sascope(input_tx, rx_cfo);
-release(sascope);
-out_cfo = rx_cfo(mascara);
-helper_functions('plot_time_phase',t, input, out_cfo ,['CFO ' num2str(offset/1e3) ' kHz'], indices);
-%% IQ Imbalance
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'IQ imbalanced signal'};
-sascope(input_tx, rx_iqi);
-release(sascope);
-Ia = num2str(ampImb);
-Ip = num2str(phImb);
-out_iqi = rx_iqi(mascara);
-helper_functions('plot_time_phase',t, input, out_iqi, ['IQI: A=' Ia 'dB, P=' Ip 'º'], indices);
-%% Phase Noise
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'Signal with Phase noise'};
-sascope(input_tx, rx_pn);
-release(sascope);
-ph = num2str(phNzLevel);
-froff = num2str(pnHzFreqOff/1e3);
-out_rx_pn = rx_pn(mascara);
-helper_functions('plot_time_phase',t, input, out_rx_pn, ['Phase noise: ' ph ' dBc/Hz at ' froff ' kHz'], indices);
-%% Opcional: Calcular y mostrar PSD con pwelch
-[pxx, fr] = pwelch(input_tx, 1024, 512, 1024, fs, 'centered', 'psd');
+output = rx_iqi(mascara);
 figure;
-plot(fr/1e6, 10*log10(pxx)+30, 'LineWidth', 2);
-xlabel('Frecuencia (MHz)'); ylabel('PSD (dBm/Hz)');
-title('Densidad espectral de potencia (Señal original)'); grid on;
-
-%% Diagramas de constelacion 
-helper_functions('constelaciones',input, out_cfo, 'CFO', 100);
-helper_functions('constelaciones',input, out_iqi, 'IQ Imbalance Matlab', 100);
-helper_functions('constelaciones',input, out_rx_pn, 'Phase Noise', 100);
-%% señal piloto
-sinewave = dsp.SineWave( ...
-    Frequency=10000, ...
-    SampleRate=fs/10, ...
-    SamplesPerFrame=2e6, ...
-    ComplexOutput=true);
-x = sinewave();
-%% aplicando iq imbalance a una señal de banda ancha con portadora
-tx = frequencyOffset(input_tx, fs, 200e3);
-rx = iqimbal(tx, 3, 10);
-%% Comparacion de PSDs
-window = 1024;
-overlap = window/2;
-nfft=1024;
-helper_functions('plot_psd',fs, input_tx, rx_pn, window, overlap, nfft, {'Original', 'iq imbalance'});
-%% estimacion de iq imbalance
-hicomp = comm.IQImbalanceCompensator('CoefficientOutputPort',true);
-[compSig, coef] = step(hicomp, input_tx);
-[aest, pest] = iqcoef2imbal(coef(end));
-disp(['Ganancia de amplitud estimada: ' num2str(aest) ' dB']);
-disp(['Desfase estimado: ' num2str(pest) ' grados']);
-%% phase noise meaurements (experimental)
-PNtarget = [-101 -105 -106 -109 -132];
-FreqOff = [1e3 5e3 10e3 100e3 1e6];
-f1 = fr(fr>=0);
-p1 = pxx(fr>=0);
-p1 = 10*log10(p1)+30;
-PNMeasure = phaseNoiseMeasure(f1,p1,25e3,FreqOff,'on','Phase Noise', PNtarget);
-%% metricas hw impairments
-ruido_fase = unwrap(angle(out_rx_pn)) - unwrap(angle(input));
-rms_phnz = rms(ruido_fase)*180/pi();
-% orf = ruido_fase(mascara);
-disp(['Potencia media del ruido de fase: ' num2str(var(ruido_fase)) ' rad^2'])
-disp(['Ruido de fase RMS en grados: ' num2str(rms_phnz)])
+subplot(2,2,1);
+plot(t*1e3, real(input(indices)));
+hold on;
+plot(t*1e3, imag(input(indices)));
+title("Señal original");
+xlabel("Tiempo (ms)")
+subplot(2,2,3);
+plot(t*1e3, real(output(indices)));
+hold on;
+plot(t*1e3, imag(output(indices)));
+title("Señal con IQ imbalance");
+xlabel("Tiempo (ms)")
+% ver las fases de la señal
+% figure;
+subplot(2,2,2);
+plot(t*1e3, angle(input(indices)));
+title("Señal original - fase");
+xlabel("Tiempo (ms)")
+subplot(2,2,4);
+plot(t*1e3, angle(output(indices)));
+title("Señal con IQ imbalance - fase");
+xlabel("Tiempo (ms)")
+%% -------------------PHASE NOISE----------------------
+phNzLevel = -90; % in dBc/Hz
+pnHzFreqOff = 1e3; % in Hz
+pnoise = comm.PhaseNoise(...
+    "Level",phNzLevel, ...
+    "FrequencyOffset",pnHzFreqOff,...
+    "SampleRate",fs);
+Y = pnoise(input_tx);
+% Y = pnoise(x);
+y = Y(mascara);
+%% frequency domain signals
+spectrum5 = spectrumAnalyzer(...
+    SampleRate=fs,...
+    SpectrumUnits="dBm",...
+    SpectrumType="power-density",...
+    Method='welch',...
+    RBWSource="Property", ...
+    RBW=50,...
+    ShowLegend=true, ChannelNames=["Input signal", "Signal with Phase noise"]);
+spectrum5(input_tx, Y);
+release(spectrum5);
+%% graficas en el dominio del tiempo
+power_x = 10*log10(mean(abs(input_tx).^2)) + 30;
+power_y = 10*log10(mean(abs(Y).^2)) + 30;
+indices = 1:500;
+t = indices/fs;
+input = input_tx(mascara);
+output = Y(mascara);
 figure;
-histogram(ruido_fase, 100, 'Normalization','pdf')
-xlabel('Ruido de fase (rad)');
-ylabel('Densidad de probabilidad');
-title('Histograma del ruido de fase');
-%% evm
-err = out_cfo - input;
-evm = std(err)/std(input) * 100;
-% evm = sqrt(mean(abs(err).^2)/mean(abs(input).^2)) * 100;
-fprintf('EVM: %.2f%%\n', evm);
+subplot(2,2,1);
+plot(t*1e3, real(input(indices)));
+hold on;
+plot(t*1e3, imag(input(indices)));
+title("Señal original");
+xlabel("Tiempo (ms)")
+subplot(2,2,3);
+plot(t*1e3, real(output(indices)));
+hold on;
+plot(t*1e3, imag(output(indices)));
+title("Señal con Phase noise");
+xlabel("Tiempo (ms)")
+% ver las fases de la señal
+% figure;
+subplot(2,2,2);
+plot(t*1e3, angle(input(indices)));
+title("Señal original - fase");
+xlabel("Tiempo (ms)")
+subplot(2,2,4);
+plot(t*1e6, angle(output(indices)));
+title("Señal con Phase noise - fase");
+xlabel("Tiempo (ms)")
 
+%% rms phase noise
+ph_err = unwrap(angle(Y) - angle(input_tx));
+rms_ph_nz_deg = rms(ph_err)*180/pi();
+disp(['The computed RMS phase noise is (degrees): ',...
+    num2str(rms_ph_nz_deg)]);
+%% espectros con RBW ajustado
+fc = 0;
+freqSpan = 2e6;
+sascopeRBW100 = spectrumAnalyzer( ...
+    SampleRate=fs, ...
+    Method="welch", ...
+    FrequencySpan="Span and center frequency", ...
+    CenterFrequency=fc, ...
+    Span=freqSpan, ...
+    RBWSource="Property", ...
+    RBW=100, ...
+    SpectrumType="Power density", ...
+    SpectralAverages=10, ...
+    SpectrumUnits="dBm", ...
+    YLimits=[-150 10], ...
+    Title="Resolution Bandwidth 100 Hz", ...
+    ChannelNames={'signal','signal with phase noise'}, ...
+    Position=[79 147 605 374]);
+sascopeRBW1k = spectrumAnalyzer( ...
+    SampleRate=fs, ...
+    Method="welch", ...
+    FrequencySpan="Span and center frequency", ...
+    CenterFrequency=fc, ...
+    Span=freqSpan, ...
+    RBWSource="Property", ...
+    RBW=1000, ...
+    SpectrumType="Power density", ...
+    SpectralAverages=10, ...
+    SpectrumUnits="dBm", ...
+    YLimits=[-150 10], ...
+    Title="Resolution Bandwidth 1 kHz", ...
+    ChannelNames={'signal','signal with phase noise'}, ...
+    Position=[685 146 605 376]);
+%%
+sascopeRBW1k(input_tx, Y);
 
-%% otras pruebas
-
-
-%% iq imbalance asimetrico
-gR = 1; % dB
-phiR = 5; % degree
-gR = 10^(gR/10);
-phiR = phiR*pi()/180;
-K1 = (1+gR*exp(-1i*phiR))/2;
-K2 = (1-gR*exp(1i*phiR))/2;
-rx_iqi_asim = K1.*input_tx + K2.*conj(input_tx);
-helper_functions('constelaciones',input, rx_iqi_asim(mascara), 'IQ Imbalance asim', 100);
-%% iq imbalance simetrico
-gR = 1; % dB
-phiR = 5; % degree
-gR = 10^(gR/10);
-phiR = phiR*pi()/180;
-alphaR = cos(phiR/2) + 1i*gR*sin(phiR/2);
-betaR = gR*cos(phiR/2) - 1i*sin(phiR/2);
-rx_iqi_sim = alphaR.*input_tx + betaR.*conj(input_tx);
-helper_functions('constelaciones',input, rx_iqi_sim(mascara), 'IQ Imbalance sim', 100);
-%% calculo de la IRR segun el algoritmo IQI de matlab
+%% comporbacion
 % Parámetros
-gR = 1; % dB
-phiR = 5; % grados
-gR = 10^(gR/10); % Escala lineal: 1.1220
-phiR = phiR * pi / 180; % Radianes: 0.0873
+Level = -65; % dBc/Hz
+FrequencyOffset = 50e3; % Hz
+SampleRate = 2e6; % Hz
 
-% Calcular términos
-sqrt_gR = sqrt(gR); % 1.0593
-cos_phi = cos(phiR/2); % 0.9991
-sin_phi = sin(phiR/2); % 0.0436
+% Calcular ratio = fs / FrequencyOffset
+ratio = SampleRate / FrequencyOffset;
 
-% Calcular alphaR y betaR
-alphaR = ((gR + 1) / (2 * sqrt_gR)) * cos_phi + 1j * ((1 - gR) / (2 * sqrt_gR)) * sin_phi;
-betaR = ((gR - 1) / (2 * sqrt_gR)) * cos_phi - 1j * ((gR + 1) / (2 * sqrt_gR)) * sin_phi;
+% Tabla para determinar el número de coeficientes (según MATLAB)
+ratioVec = [10 50 100 500 1e3 5e3 1e4 5e4 1e5 5e5 1e6 5e6 1e7 5e7];
+nCoeffVec = 2.^[7 7 7 7 7 10 10 11 12 15 16 18 19 19];
+[~, idx] = min(abs(ratio - ratioVec));
+nCoeff = nCoeffVec(idx);
+fprintf('Número de coeficientes (nCoeff): %d\n', nCoeff);
 
-% Mostrar resultados
-fprintf('alphaR = %.4f + j %.4f\n', real(alphaR), imag(alphaR)); % 1.0005 - j 0.0025
-fprintf('betaR = %.4f + j %.4f\n', real(betaR), imag(betaR)); % 0.0575 - j 0.0437
+% Calcular el numerador (num)
+num = sqrt(2 * pi * FrequencyOffset * 10^(Level/10));
+fprintf('Numerador (num): %.6f\n', num);
 
-% Calcular IRR
-IRR = 10 * log10(abs(alphaR)^2 / abs(betaR)^2);
-fprintf('IRR = %.2f dB\n', IRR); % 22.83 dB
+% Calcular el denominador (den)
+den = [1 cumprod(((2:nCoeff)-2.5)./((2:nCoeff)-1))];
+fprintf('Primeros 7 coeficientes de den: [');
+fprintf('%.6f ', den(1:7));
+fprintf(']\n');
+
+% Para el filtro IIR, el denominador real es [1, -den(2:end)]
+den_filter = [1, -den(2:end)];
+fprintf('Primeros 5 coeficientes del denominador del filtro: [');
+fprintf('%.6f ', den_filter(1:5));
+fprintf(']\n');
+
+%% varianza
+fs = 2e6;
+phNzLevel = -65;
+pnHzFreqOff = 50e3;
+duration = 120.0;
+
+% Generar señal constante para extraer phi_k
+t = 0:1/fs:120-1/fs;
+signal_in = ones(size(t), 'like', 1j).';
+%
+phnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
+signal_out = phnoise(signal_in);
+
+% Extraer phi_k como la fase de signal_out (ya que signal_in tiene fase 0)
+phi_k = angle(signal_out);
+variance_phi_k = var(phi_k);
+disp(['Varianza de phi_k: ', num2str(variance_phi_k), ' rad^2']);
+
+%%
+% medir correlacion cruzada
+% [cross_corr, lags] = xcorr(input_tx, rxSig, 10, 'normalized');
+% grafica de magnitud y fase
+% t = 0:1/fs:0.1;
+% figure;
+% subplot(3,1,1);
+% plot(t, abs(input_tx(1:length(t))));
+% title("Señal original - Magnitud");
+% subplot(3,1,2);
+% plot(t, abs(input_tx(1:length(t))));
+% title("Señal IQ imb - Magnitud");
+% subplot(3,1,3);
+% plot(lags./fs, abs(cross_corr));
+% title("Correlación cruzada Tx a Rx");
+% figure;
+% subplot(2,1,1);
+% plot(t, angle(input_tx(1:length(t))));
+% title("Señal original - fase")
+% subplot(2,1,2);
+% plot(t, angle(input_tx(1:length(t))));
+% title("Señal IQ imb - fase")

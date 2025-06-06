@@ -2,14 +2,14 @@
 clear all; close all;
 
 % Cargar señal
-signal = load('LoRa_SF12_v1.mat');
-input_tx = signal.LoRa_SF12_v1;
+signal = load('WiSun_mode_3a_v1.mat');
+input_tx = signal.WiSun_mode_3a_v1;
 fs = 2e6;
 mascara = find(abs(input_tx)>=0.005);
 input = input_tx(mascara);
 
 %% -----------------Parametros de simulacion--------------------
-ppm = 20; % PPM para CFO
+ppm = 10; % PPM para CFO
 fc = 915e6; % Frecuencia portadora
 offset = fc * ppm * 1e-6; % CFO en Hz
 ampImb = 3; % Desbalance de Amplitud (dB)
@@ -17,119 +17,151 @@ phImb = 10; % Desbalance de fase (º)
 phNzLevel = -75; % Nivel de ruido de fase (dBc/Hz)
 pnHzFreqOff = 10e3; % Offset de frecuencia para ruido de fase (Hz)
 
-%% Aplicar hardware impairments (a TODA la grabacion)
-rx_cfo = frequencyOffset(input_tx, fs, offset); % CFO
-rx_iqi = iqimbal(input_tx, ampImb, phImb); % IQ imbalance
-pnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
-rx_pn = pnoise(input_tx); % Phase noise
+%% ----------Parametros de canal--------------
+% generales
+DS_desired = 100e-9;
+v_kmh = 10;
+% Parámetros del canal Rician
+TDL_D_nd = [0, 0.035, 0.612, 1.363, 1.405, 1.804, 2.596, 1.775, ...
+            4.042, 7.937, 9.424, 9.708, 12.525];
 
+TDL_D_pow = [-0.2, -18.8, -21, -22.8, -17.9, -20.1, -21.9, -22.9, ...
+             -27.8, -23.6, -24.8, -30, -27.7];
+K_dB = 13.3;
+% Parámetros del canal Rayleigh
+TDL_C_nd = [0, 0.2099, 0.2219, 0.2329, 0.2176, 0.6366, 0.6448, 0.6560, ...
+            0.6584, 0.7935, 0.8213, 0.9336, 1.2285, 1.3083, 2.1704, ...
+            2.7105, 4.2589, 4.6003, 5.4902, 5.6077, 6.3065, 6.6374, ...
+            7.0427, 8.6523];
+
+TDL_C_pow = [-4.4, -1.2, -3.5, -5.2, -2.5, 0, -2.2, -3.9, -7.4, ...
+             -7.1, -10.7, -11.1, -5.1, -6.8, -8.7, -13.2, -13.9, ...
+             -13.9, -15.8, -17.1, -16, -15.7, -21.6, -22.8];
 %% Visualizar efectos en el dominio de frecuencia y tiempo
-indices = 1:500; % Estandarizar índices para graficar
+indices = 1:500000; % Estandarizar índices para graficar
 t = indices/fs;
-%% --------------------AWGN funcion----------------------
-rng(123);
-snr_db = 15;
-rx_awgn = awgn(input,snr_db,"measured");
-ruido = rx_awgn - input;
-disp(['SNR: ' num2str(10*log10(var(input)/var(ruido))) ' dB'])
-%% -------------------AWGN manual------------------
-rng(123);
-snr_db = 15;
-s_power = var(input);
-n_power = s_power / 10^(snr_db/10);
-noise = sqrt(n_power/2)* (randn(1,length(input)) + 1j*randn(1,length(input)));
-rx_awgn_manual = input + noise.';
-ruido = rx_awgn_manual - input;
-disp(['SNR: ' num2str(10*log10(var(input)/var(ruido))) ' dB'])
-%% AGWN grafica
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'Signal over AWGN channel'};
-sascope(input, rx_awgn_manual);
-release(sascope);
-helper_functions('plot_time_phase',t, input, rx_awgn ,['SNR ' num2str(snr_db) ' dB'], indices);
-%% ------------------CFO---------------------
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'Frequency offset signal'};
-sascope(input_tx, rx_cfo);
-release(sascope);
-out_cfo = rx_cfo(mascara);
-helper_functions('plot_time_phase',t, input, out_cfo ,['CFO ' num2str(offset/1e3) ' kHz'], indices);
-%% ------------------IQ Imbalance-----------------
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'IQ imbalanced signal'};
-sascope(input_tx, rx_iqi);
-release(sascope);
-Ia = num2str(ampImb);
-Ip = num2str(phImb);
-out_iqi = rx_iqi(mascara);
-helper_functions('plot_time_phase',t, input, out_iqi, ['IQI: A=' Ia 'dB, P=' Ip 'º'], indices);
-%% -------------------Phase Noise-------------------
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'Signal with Phase noise'};
-sascope(input_tx, rx_pn);
-release(sascope);
-ph = num2str(phNzLevel);
-froff = num2str(pnHzFreqOff/1e3);
-out_rx_pn = rx_pn(mascara);
-helper_functions('plot_time_phase',t, input, out_rx_pn, ['Phase noise: ' ph ' dBc/Hz at ' froff ' kHz'], indices);
 
-%% --------AWGN + CFO----------
-snr_db = 15;
-s_power = var(input);
-n_power = s_power / 10^(snr_db/10);
-noise = sqrt(n_power/2)* (randn(1,length(input_tx)) + 1j*randn(1,length(input_tx)));
-y = input_tx + noise.';
-% y_n = awgn(input, snr_db, 'measured');
-% y(mascara) = y_n;
-rx_awgn_cfo = frequencyOffset(y, fs, offset);
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'AWGN + Frequency offset signal'};
-sascope(input_tx, rx_awgn_cfo);
-release(sascope);
-out_awgn_cfo = rx_awgn_cfo(mascara);
-helper_functions('plot_time_phase',t, input, out_awgn_cfo ,['AWGN + CFO ' num2str(offset/1e3) ' kHz'], indices);
-
-%% --------AWGN + Phase Noise----------
-rng(123);
-snr_db = 15;
-s_power = var(input);
-n_power = s_power / 10^(snr_db/10);
-noise = sqrt(n_power/2)* (randn(1,length(input_tx)) + 1j*randn(1,length(input_tx)));
-y = input_tx + noise.';
+%% >>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<
+%        Aplicar hardware impairments en TX
+%  >>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<
+tx_cfo = frequencyOffset(input_tx, fs, offset); % CFO (poco aplicable en TX)
+tx_iqi = iqimbal(input_tx, ampImb, phImb); % IQ imbalance
 pnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
-rx_awgn_phn = pnoise(y);
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'AWGN + Phase Noise signal'};
-sascope(input_tx, rx_awgn_phn);
-release(sascope);
+tx_pn = pnoise(input_tx); % Phase noise
+%% ------------------CFO---------------------
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, tx_cfo, {'Input signal', 'Frequency offset signal'});
+tx_cfo_act = tx_cfo(mascara);
+helper_functions('plot_time_phase', ...
+    input, tx_cfo_act ,['CFO ' num2str(offset/1e3) ' kHz'], indices, fs);
+%% ------------------IQ Imbalance-----------------
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, tx_iqi, {'Input signal', 'IQ imbalanced signal'});
+Ia = num2str(ampImb);
+Ip = num2str(phImb);
+tx_iqi_act = tx_iqi(mascara);
+helper_functions('plot_time_phase',...
+    input, tx_iqi_act, ['IQI: A=' Ia 'dB, P=' Ip 'º'], indices, fs, true);
+%% -------------------Phase Noise-------------------
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, tx_pn, {'Input signal', 'Phase Noise signal'});
 ph = num2str(phNzLevel);
 froff = num2str(pnHzFreqOff/1e3);
-out_awgn_phn = rx_awgn_phn(mascara);
-helper_functions('plot_time_phase',t, input, out_awgn_phn ,['AWGN + Phase noise: ' ph ' dBc/Hz at ' froff ' kHz'], indices);
+tx_pn_act = tx_pn(mascara);
+helper_functions('plot_time_phase',...
+    input, tx_pn_act, ['Phase noise: ' ph ' dBc/Hz at ' froff ' kHz'], indices, fs, true);
 
-%% --------AWGN + IQ IMBALANCE----------
+%% >>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<
+%        Aplicar hardware impairments en RX
+%  >>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<
+%% -----------SEÑAL SOBRE CANAL AWGN------------
 rng(123);
 snr_db = 15;
 s_power = var(input);
 n_power = s_power / 10^(snr_db/10);
 noise = sqrt(n_power/2)* (randn(1,length(input_tx)) + 1j*randn(1,length(input_tx)));
 y = input_tx + noise.';
-rx_awgn_iqi = iqimbal(y, ampImb, phImb);
-clear sascope;
-sascope = helper_functions('nuevoanalizadorSpec',fs);
-sascope.ChannelNames = {'Input signal', 'IQ imbalanced signal'};
-sascope(input_tx, rx_awgn_iqi);
-release(sascope);
+rx_awgn_act = y(mascara);
+%% -----------SEÑAL SOBRE CANAL RICIAN---------
+rx_Rician = helper_functions('apply_rician_channel', input_tx, fs,...
+    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, K_dB);
+% escalar señal y aplicar awgn
+snr_db = 15;
+[y1, w1] = helper_functions('apply_snr', input_tx, rx_Rician, snr_db, mascara);
+rx_rician_act = y1(mascara);
+%% -----------SEÑAL SOBRE CANAL RAYLEIGH---------
+rx_Rayleigh = helper_functions('apply_rayleigh_channel', input_tx, fs,...
+    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired);
+% escalar señal y aplicar awgn (y[n] = x[n]*h[n] + w[n])
+snr_db = 15;
+[y2, w2] = helper_functions('apply_snr', input_tx, rx_Rayleigh, snr_db, mascara);
+rx_rayleigh_act = y2(mascara);
+%% --------VISUALIZAR RX----------
+% awgn
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, y, {'Input signal', 'AWGN Channel signal'});
+helper_functions('plot_time_phase',input,rx_awgn_act,['AWGN con SNR ' num2str(snr_db) ' dB'], indices, fs, true);
+%% rician
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, y1, {'Input signal', 'Rician Channel signal'});
+helper_functions('plot_time_phase',input,rx_rician_act,['Rician ' num2str(K_dB) ' dB + AWGN'], 1:2000, fs, true);
+%% rayleigh
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, y2, {'Input signal', 'Rayleigh Channel signal'});
+helper_functions('plot_time_phase',input,rx_rayleigh_act,['Rayleigh DS = ' num2str(DS_desired*1e9) ' ns, AWGN'], indices, fs, true);
+%% --------CANAL + CFO----------
+rx_chan_cfo = frequencyOffset(y1, fs, offset);
+rx_chan_cfo_act = rx_chan_cfo(mascara);
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, rx_chan_cfo, {'Input signal', 'Rician Channel + Frequency offset signal'});
+helper_functions('plot_time_phase',...
+    input, rx_chan_cfo_act ,['Rician + CFO ' num2str(offset/1e3) ' kHz'], 1:2000, fs, false);
+%% primero channel, luego CFO, luego AWGN
+rx_chan_cfo2 = frequencyOffset(rx_Rician, fs, offset);
+[y12, w12] = helper_functions('apply_snr', input_tx, rx_chan_cfo2, snr_db, mascara);
+rx_chan_cfo_act2 = y12(mascara);
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, rx_chan_cfo, {'Input signal', 'Rician Channel + Frequency offset signal'});
+helper_functions('plot_time_phase',...
+    input, rx_chan_cfo_act2 ,['Rician + CFO ' num2str(offset/1e3) ' kHz'], 1:2000, fs, true);
+%% --------CANAL + Phase Noise----------
+pnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
+rx_chan_phn = pnoise(y1);
+ph = num2str(phNzLevel);
+froff = num2str(pnHzFreqOff/1e3);
+rx_chan_phn_act = rx_chan_phn(mascara);
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, rx_chan_phn, {'Input signal', 'Rician + Phase Noise signal'});
+helper_functions('plot_time_phase',input, rx_chan_phn_act , ...
+    ['Rician + Phase noise: ' ph ' dBc/Hz at ' froff ' kHz'], 1:2000, fs, true);
+%% primero channel, luego phase noise, luego AWGN
+pnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
+rx_chan_phn2 = pnoise(rx_Rician);
+[y13, w13] = helper_functions('apply_snr', input_tx, rx_chan_phn2, snr_db, mascara);
+rx_chan_phn_act2 = y13(mascara);
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, rx_chan_phn2, {'Input signal', 'Rician + Phase Noise signal'});
+helper_functions('plot_time_phase',input, rx_chan_phn_act2 , ...
+    ['Rician + Phase noise: ' ph ' dBc/Hz at ' froff ' kHz'], 1:2000, fs, true);
+%% --------CANAL + IQ IMBALANCE----------
+rx_chan_iqi = iqimbal(y1, ampImb, phImb);
 Ia = num2str(ampImb);
 Ip = num2str(phImb);
-out_awgn_iqi = rx_awgn_iqi(mascara);
-helper_functions('plot_time_phase',t, input, out_awgn_iqi, ['AWGN + IQI: A=' Ia 'dB, P=' Ip 'º'], indices);
+rx_chan_iqi_act = rx_chan_iqi(mascara);
+clear sa;
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    input_tx, rx_chan_iqi, {'Input signal', 'Rician + IQI signal'});
+helper_functions('plot_time_phase',input, rx_chan_iqi_act, ...
+    ['Rician + IQI: A=' Ia 'dB, P=' Ip 'º'], 1:2000, fs, false);
 %% Opcional: Calcular y mostrar PSD con pwelch
 [pxx, fr] = pwelch(input_tx, 1024, 512, 1024, fs, 'centered', 'psd');
 figure;
@@ -137,15 +169,15 @@ plot(fr/1e6, 10*log10(pxx)+30, 'LineWidth', 2);
 xlabel('Frecuencia (MHz)'); ylabel('PSD (dBm/Hz)');
 title('Densidad espectral de potencia (Señal original)'); grid on;
 
-%% Diagramas de constelacion (efectos aislados)
-helper_functions('constelaciones',input, rx_awgn, 'AWGN', 50);
-helper_functions('constelaciones',input, out_cfo, 'CFO', 100);
-helper_functions('constelaciones',input, out_iqi, 'IQ Imbalance Matlab', 100);
-helper_functions('constelaciones',input, out_rx_pn, 'Phase Noise', 100);
-% efectos combinados (no es tan evidente debido al AWGN)
-helper_functions('constelaciones',input, out_awgn_cfo, 'AWGN + CFO', 100);
-helper_functions('constelaciones',input, out_awgn_iqi, 'AWGN + IQI', 100);
-helper_functions('constelaciones',input, out_awgn_phn, 'AWGN + PhN', 100);
+%% --------------Diagramas de constelacion (en TX)-----------
+helper_functions('constelaciones',input, rx_awgn_act, 'AWGN', 50);
+helper_functions('constelaciones',input, tx_cfo_act, 'CFO', 1000);
+helper_functions('constelaciones',input, tx_iqi_act, 'IQ Imbalance Matlab', 1000);
+helper_functions('constelaciones',input, tx_pn_act, 'Phase Noise', 1000);
+% efectos en RX (no es tan evidente debido al paso por el canal)
+helper_functions('constelaciones',input, rx_chan_cfo_act, 'Channel + CFO', 100);
+helper_functions('constelaciones',input, rx_chan_iqi_act, 'Channel + IQI', 100);
+helper_functions('constelaciones',input, rx_chan_phn_act, 'Channel + PhN', 100);
 %% señal piloto
 sinewave = dsp.SineWave( ...
     Frequency=10000, ...
@@ -156,14 +188,14 @@ x = sinewave();
 %% aplicando iq imbalance a una señal de banda ancha con portadora
 tx = frequencyOffset(input_tx, fs, 200e3);
 rx = iqimbal(tx, 3, 10);
-%% Comparacion de PSDs
+%% --------------------Comparacion de PSDs-----------------------
 window = 1024;
 overlap = window/2;
 nfft=1024;
-helper_functions('plot_psd',fs, input, out_awgn_phn, window, overlap, nfft, {'Original', 'awgn+phn'});
-%% estimacion de iq imbalance
+helper_functions('plot_psd',fs, input, y2(mascara), window, overlap, nfft, {'Original', 'rayleigh+awgn'});
+%% ESTIMACION DE IQ IMBALANCE MATLAB
 hicomp = comm.IQImbalanceCompensator('CoefficientOutputPort',true);
-[compSig, coef] = step(hicomp, input_tx);
+[compSig, coef] = step(hicomp, rx_chan_iqi);
 [aest, pest] = iqcoef2imbal(coef(end));
 disp(['Ganancia de amplitud estimada: ' num2str(aest) ' dB']);
 disp(['Desfase estimado: ' num2str(pest) ' grados']);
@@ -174,8 +206,8 @@ f1 = fr(fr>=0);
 p1 = pxx(fr>=0);
 p1 = 10*log10(p1)+30;
 PNMeasure = phaseNoiseMeasure(f1,p1,25e3,FreqOff,'on','Phase Noise', PNtarget);
-%% metricas hw impairments
-ruido_fase = unwrap(angle(out_rx_pn)) - unwrap(angle(input));
+%% ----------------metricas hw impairments-------------------
+ruido_fase = unwrap(angle(tx_pn_act)) - unwrap(angle(input));
 rms_phnz = rms(ruido_fase)*180/pi();
 % orf = ruido_fase(mascara);
 disp(['Potencia media del ruido de fase: ' num2str(var(ruido_fase)) ' rad^2'])
@@ -186,14 +218,49 @@ histogram(ruido_fase, 100, 'Normalization','pdf')
 xlabel('Ruido de fase (rad)');
 ylabel('Densidad de probabilidad');
 title('Histograma del ruido de fase');
-%% evm
-err = out_awgn_phn - input;
+%% ------------------evm----------------------
+err = tx_pn_act - input;
 % evm = std(err)/std(input) * 100;
 evm = sqrt(mean(abs(err).^2)/mean(abs(input).^2)) * 100;
 fprintf('EVM: %.2f%%\n', evm);
 
+%% ----------------------SNR INSTANTANEA-------------------------
+% snr instantanea tras canal AWGN + Fading Channel
+[snr_inst, ~] = helper_functions('calculate_snr', input_tx, noise.', mascara, 1024);
+[snr_inst_y1, ~] = helper_functions('calculate_snr', y1, w1, mascara, 1024);
+[snr_inst_y2, ~] = helper_functions('calculate_snr', y2, w2, mascara, 1024);
+figure;
+histogram(snr_inst, (snr_db -15):0.1:(snr_db+15), 'Normalization','pdf','EdgeColor','none');
+% xlim([(snr_db -3) (snr_db+3)])
+title('SNR instantanea');
+xlabel('SNR instantanea (dB)');
+ylabel('Densidad');
+xline(snr_db, 'r--', 'SNR media');
+hold on;
+histogram(snr_inst_y1, (snr_db -15):0.1:(snr_db+15), 'Normalization','pdf','EdgeColor','none');
+hold on;
+histogram(snr_inst_y2, (snr_db -15):0.1:(snr_db+15), 'Normalization','pdf','EdgeColor','none');
 
-%% otras pruebas
+
+
+%% evaluacion de varianzas, magnitud de error y error de phase
+v_in = var(input);
+v_rx_cfo = var(out_cfo);
+v_rx_iqi = var(tx_iqi_act);
+v_rx_phn = var(out_rx_pn);
+v_rx_awgn_cfo = var(rx_chan_cfo);
+v_rx_awgn_iqi = var(rx_chan_iqi_act);
+v_rx_awgn_phn = var(rx_chan_phn_act);
+errpower_cfo = mean(abs(out_cfo - input).^2);
+errpower_iqi = mean(abs(tx_iqi_act - input).^2);
+errpower_phn = mean(abs(out_rx_pn - input).^2);
+errphase_cfo = mean(abs(unwrap(angle(out_cfo) - angle(input))));
+errphase_iqi = mean(abs(unwrap(angle(tx_iqi_act) - angle(input))));
+errphase_phn = mean(abs(unwrap(angle(out_rx_pn) - angle(input))));
+
+
+
+
 
 
 %% iq imbalance asimetrico
@@ -247,3 +314,47 @@ fprintf('betaR = %.4f + j %.4f\n', real(betaR), imag(betaR)); % 0.0575 - j 0.043
 % Calcular IRR
 IRR = 10 * log10(abs(alphaR)^2 / abs(betaR)^2);
 fprintf('IRR = %.2f dB\n', IRR); % 22.83 dB
+
+
+
+%% ANALISIS POR SEPARADO A UNA SEÑAL CON CONSTELACION
+f_s = 1000000;
+M = 16;
+snrdB = 30;
+refConst = qammod(0:M-1,M,UnitAveragePower=true);
+data = randi([0 M-1], 1000, 1);
+modSig = qammod(data,M,UnitAveragePower=true);
+
+%%
+% recibida = iqimbal(modSig, 3, 10);
+% recibida = frequencyOffset(modSig, f_s, 5);
+p_noise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', f_s);
+% recibida = pnoise(modSig);
+% recibida = awgn(iqimbal(modSig, 3, 10), 30, 'measured');
+recibida = awgn(pnoise(modSig), 30, 'measured');
+constDiagram = comm.ConstellationDiagram(...
+    ReferenceConstellation=refConst);
+constDiagram(recibida);
+release(constDiagram);
+%%
+rChan = comm.RayleighChannel(...
+    SampleRate=50000,...
+    MaximumDopplerShift=4,...
+    PathDelays=[0 2e-8], ...
+    AveragePathGains=[0 -9]);
+cd = comm.ConstellationDiagram;
+M = 4;
+for n = 1:125
+    tx = randi([0 M-1], 500, 1);
+    pskSig = pskmod(tx,M,pi/4);
+    fadedSig = rChan(pskSig);
+    update(cd,fadedSig);
+end
+% helper_functions('plot_psd',f_s, modSig, recibida, window, overlap, nfft, {'Original', 'Recibida'});
+
+%% -----------------GUARDAR ARCHIVO------------------
+output_dir = '/media/wicomtec/Datos2/DATASET UPC-LPWAN-1/RAW/muestras';
+senial = rx_chan_cfo_act(1:5000000);
+save_filename = fullfile(output_dir, strrep('WiSun_mode_3a_v1.mat', '.mat', '_hw_cfo.mat'));
+save(save_filename, 'senial', '-v7.3');
+
