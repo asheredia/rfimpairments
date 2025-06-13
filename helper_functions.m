@@ -182,7 +182,7 @@ function rx_signal = apply_rician_channel(signal, fs, fc, v, TDL_D_nd, TDL_D_pow
     
     % Configure Rician channel with unique seed
     seed_channel = randi(2^31 - 1);
- rng(seed_channel); % Set random seed for reproducibility
+    rng(seed_channel); % Set random seed for reproducibility
     ricianChan = comm.RicianChannel( ...
         'SampleRate', fs, ... % Sampling frequency
         'KFactor', K, ... % Linear K factor
@@ -303,12 +303,12 @@ function [rx_n, noise] = apply_snr(signal_tx, signal_rx, snr_db, mask)
     tx_power = mean(abs(signal_tx(mask)).^2); % Transmitted signal power
     rx_power = mean(abs(signal_rx(mask)).^2); % Received signal power
     a = sqrt(tx_power / rx_power); % Scaling factor
-    disp(["Aplying scaling factor: " num2str(a)]); % Log scaling factor
-    rx_scaled = a * signal_rx(mask); % Scale received signal
+    % disp(["Aplying scaling factor: " num2str(a)]); % Log scaling factor
+    rx_scaled = a * signal_rx; % Scale received signal
     
     % Calculate noise power for desired SNR
-    s_power = mean(abs(rx_scaled).^2); % Scaled signal power
+    s_power = mean(abs(rx_scaled(mask)).^2); % Scaled signal power
     n_power = s_power / 10^(snr_db / 10); % Noise power for desired SNR
     noise = sqrt(n_power / 2) * (randn(1, length(signal_rx)) + 1j * randn(1, length(signal_rx))).'; % Generate complex AWGN
-    rx_n = signal_rx + noise; % Add noise to received signal
+    rx_n = rx_scaled + noise; % Add noise to received signal
 end
