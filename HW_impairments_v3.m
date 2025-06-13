@@ -1,19 +1,14 @@
 clear all;
 % List of files to be processed
 file_list = {
-    'HaLow_OFDM_MCS0_v1.mat', 'HaLow_OFDM_MCS0_v1';
-    'HaLow_OFDM_MCS1_v1.mat', 'HaLow_OFDM_MCS1_v1';
-    'HaLow_OFDM_MCS3_v1.mat', 'HaLow_OFDM_MCS3_v1';
-    'HaLow_OFDM_MCS5_v1.mat', 'HaLow_OFDM_MCS5_v1';
-    'HaLow_OFDM_MCS10_v1.mat', 'HaLow_OFDM_MCS10_v1';
-    'LoRa_SF07_v1.mat', 'LoRa_SF07_v1';
-    'LoRa_SF7B_v1.mat', 'LoRa_SF7B_v1';
-    'LoRa_SF08_v1.mat', 'LoRa_SF08_v1';
-    'LoRa_SF8C_v1.mat', 'LoRa_SF8C_v1';
-    'LoRa_SF09_v1.mat', 'LoRa_SF09_v1';
-    'LoRa_SF10_v1.mat', 'LoRa_SF10_v1';
-    'LoRa_SF11_v1.mat', 'LoRa_SF11_v1';
-    'LoRa_SF12_v1.mat', 'LoRa_SF12_v1';
+    'WiSun_mode_1a_v1.mat', 'WiSun_mode_1a_v1';
+    'WiSun_mode_1b_v1.mat', 'WiSun_mode_1b_v1';
+    'WiSun_mode_2a_v1.mat', 'WiSun_mode_2a_v1';
+    'WiSun_mode_2b_v1.mat', 'WiSun_mode_2b_v1';
+    'WiSun_mode_3a_v1.mat', 'WiSun_mode_3a_v1';
+    'WiSun_mode_4a_v1.mat', 'WiSun_mode_4a_v1';
+    'WiSun_mode_4b_v1.mat', 'WiSun_mode_4b_v1';
+    'WiSun_mode_5_v1.mat', 'WiSun_mode_5_v1'
     'MR_FSK_mode_1_v1.mat', 'MR_FSK_mode_1_v1';
     'MR_FSK_mode_2_v1.mat', 'MR_FSK_mode_2_v1';
     'MR_FSK_mode_3_v1.mat', 'MR_FSK_mode_3_v1';
@@ -31,15 +26,20 @@ file_list = {
     'MR_OQPSK_RM1_v1.mat', 'MR_OQPSK_RM1_v1';
     'MR_OQPSK_RM2_v1.mat', 'MR_OQPSK_RM2_v1';
     'MR_OQPSK_RM3_v1.mat', 'MR_OQPSK_RM3_v1';
-    'SigFox_v1.mat', 'SigFox_v1';
-    'WiSun_mode_1a_v1.mat', 'WiSun_mode_1a_v1';
-    'WiSun_mode_1b_v1.mat', 'WiSun_mode_1b_v1';
-    'WiSun_mode_2a_v1.mat', 'WiSun_mode_2a_v1';
-    'WiSun_mode_2b_v1.mat', 'WiSun_mode_2b_v1';
-    'WiSun_mode_3a_v1.mat', 'WiSun_mode_3a_v1';
-    'WiSun_mode_4a_v1.mat', 'WiSun_mode_4a_v1';
-    'WiSun_mode_4b_v1.mat', 'WiSun_mode_4b_v1';
-    'WiSun_mode_5_v1.mat', 'WiSun_mode_5_v1'
+    'HaLow_OFDM_MCS0_v1.mat', 'HaLow_OFDM_MCS0_v1';
+    'HaLow_OFDM_MCS1_v1.mat', 'HaLow_OFDM_MCS1_v1';
+    'HaLow_OFDM_MCS3_v1.mat', 'HaLow_OFDM_MCS3_v1';
+    'HaLow_OFDM_MCS5_v1.mat', 'HaLow_OFDM_MCS5_v1';
+    'HaLow_OFDM_MCS10_v1.mat', 'HaLow_OFDM_MCS10_v1';
+    'LoRa_SF07_v1.mat', 'LoRa_SF07_v1';    
+    'LoRa_SF08_v1.mat', 'LoRa_SF08_v1';   
+    'LoRa_SF09_v1.mat', 'LoRa_SF09_v1';
+    'LoRa_SF10_v1.mat', 'LoRa_SF10_v1';
+    'LoRa_SF11_v1.mat', 'LoRa_SF11_v1';
+    'LoRa_SF12_v1.mat', 'LoRa_SF12_v1';
+    'LoRa_SF7B_v1.mat', 'LoRa_SF7B_v1';
+    'LoRa_SF8C_v1.mat', 'LoRa_SF8C_v1';
+    'SigFox_v1.mat', 'SigFox_v1'   
 };
 % Sample rate (same as the one set on SDR to capture signal data)
 fs = 2e6;
@@ -49,10 +49,12 @@ fs = 2e6;
 ppm = 5; % Carrier Frequency Offset (CFO) in parts per million (ppm)
 fc = 915e6; % Carrier frequency in Hz
 offset = fc * ppm * 1e-6; % Calculated CFO in Hz based on ppm and carrier frequency
-ampImb = 3; % Amplitude imbalance in dB for IQ imbalance simulation
-phImb = 50; % Phase mismatch in degrees for IQ imbalance simulation
-phNzLevel = [-85 -118 -125 -145]; % Phase noise levels in dBc/Hz at specified frequency offsets
-pnHzFreqOff = [1e3 9.5e3 19.5e3 195e3]; % Frequency offsets in Hz where phase noise is applied
+ampImb = 5; % Amplitude imbalance in dB for IQ imbalance simulation
+phImb = 15; % Phase mismatch in degrees for IQ imbalance simulation
+% phNzLevel = [-85 -118 -125 -145]; % Phase noise levels in dBc/Hz at specified frequency offsets
+% pnHzFreqOff = [1e3 9.5e3 19.5e3 195e3]; % Frequency offsets in Hz where phase noise is applied
+phNzLevel = [-101 -105 -106 -109]; % Phase noise levels in dBc/Hz at specified frequency offsets
+pnHzFreqOff = [1e3 5e3 10e3 100e3]; % Frequency offsets in Hz where phase noise is applied
 % phNzLevel = -90; % Commented: Scalar phase noise level in dBc/Hz (alternative option)
 % pnHzFreqOff = 1e3; % Commented: Scalar frequency offset in Hz (alternative option)
 
@@ -133,16 +135,16 @@ end
 
 %% -------------Parallel Processing with Parfor-------------
 % Process files in parallel using parfor for acceleration
-parpool("Processes", 20); % Commented: Initialize parallel pool with 20 workers
+% parpool("Processes", 20); % Commented: Initialize parallel pool with 20 workers
 % Initialize cell arrays to store results
 num_files = size(file_list, 1); % Number of files to process
 senial_cell = cell(num_files, 1); % Cell array for processed signals
 clean_signals = cell(num_files, 1); % Cell array for clean (masked) signals
 filename_cell = cell(num_files, 1); % Cell array for output filenames
 output_dir = '/media/wicomtec/Datos2/DATASET UPC-LPWAN-1/RAW/muestras'; % Output directory
-
+rng(2025);
 % Process files in parallel
-snr_db = 10; % SNR in dB for AWGN application
+snr_db = 20; % SNR in dB for AWGN application
 parfor i = 1:num_files
     % Load signal from .mat file
     mat_file = file_list{i, 1}; % Retrieve .mat file name
@@ -155,6 +157,8 @@ parfor i = 1:num_files
 
     % Apply amplitude mask to filter samples
     mascara = abs(input_tx) >= 0.005;
+
+    % disp(['Muestras de señal útil: ', num2str(length(mascara))])
 
     % Commented: Apply Rician channel model (disabled)
     % rx_rician = helper_functions('apply_rician_channel', input_tx, fs, ...
@@ -177,14 +181,20 @@ parfor i = 1:num_files
     rx_chan_iqi_act = rx_chan_iqi(mascara); % Apply mask to IQ-imbalanced signal
 
     % Limit signal to 5M samples
-    senial = rx_chan_iqi_act(1:5000000);
+    senial = rx_chan_iqi_act(1:10000000);
+
+    % ONLY USE WITH PHASE NOISE:
+    % ruido_fase = unwrap(angle(rx_chan_phn_act)) - unwrap(angle(input_tx(mascara)));
+    % rms_phnz = rms(ruido_fase)*180/pi();
+    % % orf = ruido_fase(mascara);
+    % disp(['Phase noise mean power for: ' var_name ' -> ' num2str(var(ruido_fase)) ' rad^2'])
 
     % Generate output filename
     save_filename = fullfile(output_dir, strrep(mat_file, '.mat', '_hw_iqi.mat'));
 
     % Store results in cell arrays
     cl = input_tx(mascara); % Apply mask to clean signal
-    clean_signals{i} = cl(1:5000000); % Store first 5M samples of clean signal
+    clean_signals{i} = cl(1:10000000); % Store first 10M samples of clean signal
     senial_cell{i} = senial; % Store processed signal
     filename_cell{i} = save_filename; % Store output filename
 
@@ -202,16 +212,18 @@ for i = 1:num_files
     toc % Display elapsed time
     disp(['Guardado: ', save_filename]); % Log save status
 end
-
 % Commented: Clear cell arrays to free memory
 % clear senial_cell filename_cell;
 
 %% Plotting
 % Plot time and phase comparison for a specific signal pair
-helper_functions('plot_time_phase', clean_signals{14}, senial_cell{14}, ...
-    ['Canal AWGN ' num2str(snr_db) ' dB'], 5000:6000, fs, true); % Plot samples 5000 to 6000
+helper_functions('plot_time_phase', clean_signals{36}, senial_cell{36}, ...
+    ['Canal AWGN ' num2str(snr_db) ' dB'], 5000:5500, fs, false); % Plot samples 5000 to 6000
 %% PSD Plots
 window = 1024;
 overlap = window/2;
 nfft=1024;
-helper_functions('plot_psd',fs, clean_signals{31}, senial_cell{31}, window, overlap, nfft, {'Original', 'Impaired signal'});
+helper_functions('plot_psd',fs, clean_signals{36}, senial_cell{36}, window, overlap, nfft, {'Original', 'Impaired signal'});
+%% Matlab spectrogram with SpectrumAnalyzer
+sa = helper_functions('nuevoanalizadorSpec',fs, ...
+    clean_signals{36}, senial_cell{36}, {'Input signal', 'Impaired signal'});
