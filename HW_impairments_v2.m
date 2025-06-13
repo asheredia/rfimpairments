@@ -2,8 +2,8 @@
 clear all; close all;
 
 % Cargar señal
-signal = load('WiSun_mode_3a_v1.mat');
-input_tx = signal.WiSun_mode_3a_v1;
+signal = load('MR_OFDM2_MCS5_v1.mat');
+input_tx = signal.MR_OFDM2_MCS5_v1;
 fs = 2e6;
 mascara = find(abs(input_tx)>=0.005);
 input = input_tx(mascara);
@@ -19,7 +19,7 @@ pnHzFreqOff = 10e3; % Offset de frecuencia para ruido de fase (Hz)
 
 %% ----------Parametros de canal--------------
 % generales
-DS_desired = 100e-9;
+DS_desired = 300e-9;
 v_kmh = 10;
 % Parámetros del canal Rician
 TDL_D_nd = [0, 0.035, 0.612, 1.363, 1.405, 1.804, 2.596, 1.775, ...
@@ -91,7 +91,17 @@ rx_Rician = helper_functions('apply_rician_channel', input_tx, fs,...
 % escalar señal y aplicar awgn
 snr_db = 15;
 [y1, w1] = helper_functions('apply_snr', input_tx, rx_Rician, snr_db, mascara);
-rx_rician_act = y1(mascara);
+
+rx_Rician6 = helper_functions('apply_rician_channel', input_tx, fs,...
+    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 6);
+% escalar señal y aplicar awgn
+[y1_6, w1_6] = helper_functions('apply_snr', input_tx, rx_Rician6, snr_db, mascara);
+
+rx_Rician20 = helper_functions('apply_rician_channel', input_tx, fs,...
+    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 20);
+% escalar señal y aplicar awgn
+[y1_20, w1_20] = helper_functions('apply_snr', input_tx, rx_Rician20, snr_db, mascara);
+% rx_rician_act = y1(mascara);
 %% -----------SEÑAL SOBRE CANAL RAYLEIGH---------
 rx_Rayleigh = helper_functions('apply_rayleigh_channel', input_tx, fs,...
     fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired);
@@ -114,7 +124,7 @@ helper_functions('plot_time_phase',input,rx_rician_act,['Rician ' num2str(K_dB) 
 clear sa;
 sa = helper_functions('nuevoanalizadorSpec',fs, ...
     input_tx, y2, {'Input signal', 'Rayleigh Channel signal'});
-helper_functions('plot_time_phase',input,rx_rayleigh_act,['Rayleigh DS = ' num2str(DS_desired*1e9) ' ns, AWGN'], indices, fs, true);
+helper_functions('plot_time_phase',input,rx_rayleigh_act,['Rayleigh DS = ' num2str(DS_desired*1e9) ' ns, AWGN'], 1:5000, fs, true);
 %% --------CANAL + CFO----------
 rx_chan_cfo = frequencyOffset(y1, fs, offset);
 rx_chan_cfo_act = rx_chan_cfo(mascara);
@@ -192,7 +202,7 @@ rx = iqimbal(tx, 3, 10);
 window = 1024;
 overlap = window/2;
 nfft=1024;
-helper_functions('plot_psd',fs, input, y2(mascara), window, overlap, nfft, {'Original', 'rayleigh+awgn'});
+helper_functions('plot_psd',fs, input, y1_6(mascara), window, 0, nfft, {'Original', 'rayleigh+awgn'});
 %% ESTIMACION DE IQ IMBALANCE MATLAB
 hicomp = comm.IQImbalanceCompensator('CoefficientOutputPort',true);
 [compSig, coef] = step(hicomp, rx_chan_iqi);
@@ -226,23 +236,117 @@ fprintf('EVM: %.2f%%\n', evm);
 
 %% ----------------------SNR INSTANTANEA-------------------------
 % snr instantanea tras canal AWGN + Fading Channel
-[snr_inst, ~] = helper_functions('calculate_snr', input_tx, noise.', mascara, 1024);
-[snr_inst_y1, ~] = helper_functions('calculate_snr', y1, w1, mascara, 1024);
-[snr_inst_y2, ~] = helper_functions('calculate_snr', y2, w2, mascara, 1024);
+[snr_inst, ins] = helper_functions('calculate_snr', input_tx, noise.', mascara, 128);
+[snr_inst_y13, ~] = helper_functions('calculate_snr', y1, w1, mascara, 128);
+[snr_inst_y6, ~] = helper_functions('calculate_snr', y1_6, w1_6, mascara, 128);
+[snr_inst_y20, ~] = helper_functions('calculate_snr', y1_20, w1_20, mascara, 128);
+[snr_inst_y2, ~] = helper_functions('calculate_snr', y2, w2, mascara, 128);
+%%
 figure;
-histogram(snr_inst, (snr_db -15):0.1:(snr_db+15), 'Normalization','pdf','EdgeColor','none');
-% xlim([(snr_db -3) (snr_db+3)])
-title('SNR instantanea');
+histogram(snr_inst, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
+xlim([(snr_db -16) (snr_db+16)])
+title('Distribución de Probabilidad');
 xlabel('SNR instantanea (dB)');
 ylabel('Densidad');
-xline(snr_db, 'r--', 'SNR media');
+xline(snr_db, 'r--');
 hold on;
-histogram(snr_inst_y1, (snr_db -15):0.1:(snr_db+15), 'Normalization','pdf','EdgeColor','none');
+histogram(snr_inst_y20, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
+histogram(snr_inst_y13, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
+histogram(snr_inst_y6, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
+% hold on;
+% histogram(snr_inst_y2, (snr_db -15):0.1:(snr_db+15), 'Normalization','pdf','EdgeColor','none');
+legend('Sólo AWGN', 'SNR media' ,'Rician K 20dB + AWGN', 'Rician K 13.3dB + AWGN', 'Rician K 6dB + AWGN');
+
+%% -------------VERSION 2 DE HISTOGRAMAS - Rician ----------
+% Para distribucion y comparacion con Rician de diferentes K
+figure;
+% Compute and plot kernel density estimates
+[x1, f1] = ksdensity(snr_inst, linspace(snr_db - 17, snr_db + 17, 1000));
+[x2, f2] = ksdensity(snr_inst_y20, linspace(snr_db - 17, snr_db + 17, 1000));
+[x3, f3] = ksdensity(snr_inst_y13, linspace(snr_db - 17, snr_db + 17, 1000));
+[x4, f4] = ksdensity(snr_inst_y6, linspace(snr_db - 17, snr_db + 17, 1000));
+
+% Plot smooth curves with distinct colors
+plot(f1, x1, 'k', 'LineWidth', 2); % Blue
 hold on;
-histogram(snr_inst_y2, (snr_db -15):0.1:(snr_db+15), 'Normalization','pdf','EdgeColor','none');
+plot(f2, x2, 'Color', [0 0.4470 0.7410], 'LineWidth', 2); % Forest Green
+plot(f3, x3, 'Color', '#D95319', 'LineWidth', 2); % Magenta
+plot(f4, x4, 'Color', '#7E2F8E', 'LineWidth', 2); % Dark Red
+% xline(snr_db, 'r--', 'LineWidth', 1.5);
+
+% Set plot properties
+xlim([snr_db - 18, snr_db + 18]);
+title('Distribución de SNR instantánea');
+xlabel('SNR instantánea (dB)');
+ylabel('Densidad');
+legend('Sólo AWGN', 'Rician K 20dB + AWGN', 'Rician K 13.3dB + AWGN', 'Rician K 6dB + AWGN', 'Location', 'best');
+grid on;
+hold off;
+
+%% -------------VERSION 2 DE HISTOGRAMAS - Rayleigh ----------
+% Para distribucion y comparacion con Rayleigh
+figure;
+% Compute and plot kernel density estimates
+[xa, fa] = ksdensity(snr_inst, linspace(snr_db - 17, snr_db + 17, 1000));
+[xb, fb] = ksdensity(snr_inst_y2, linspace(snr_db - 17, snr_db + 17, 1000));
+
+% Plot smooth curves with distinct colors
+plot(fa, xa, 'k', 'LineWidth', 2); % Blue
+hold on;
+plot(fb, xb, 'Color', [0 0.4470 0.7410], 'LineWidth', 2); % Forest Green
+% xline(snr_db, 'r--', 'LineWidth', 1.5);
+
+% Set plot properties
+xlim([snr_db - 17.5, snr_db + 17.5]);
+title('Distribución de SNR instantánea');
+xlabel('SNR instantánea (dB)');
+ylabel('Densidad');
+legend('Sólo AWGN', 'Rayleigh + AWGN', 'Location', 'best');
+grid on;
+hold off;
+
+%% evolucion de las snrs ventaneadas
+figure;
+plot((1:length(ins)) * 2048, ins);
+xlabel('Sample Index (Window Center)');
+ylabel('Windowed SNR (dB)');
+title(['Windowed SNR (Target SNR = ' num2str(snr_db) ' dB)']);
 
 
+%% diferencias de fase instantanea
 
+% Extraer componentes I y Q
+I = real(vara);
+Q = imag(vara);
+
+% Calcular fase instantánea de cada componente
+phase_I = unwrap(atan2(imag(hilbert(I)), I));
+phase_Q = unwrap(atan2(imag(hilbert(Q)), Q));
+
+% Diferencia de fase (debería ser ±90°)
+phase_diff = phase_Q - phase_I;
+phase_diff_deg = phase_diff * 180/pi;
+
+% Desviación de la ortogonalidad ideal (90°)
+ortogonality_error = abs(mod(abs(phase_diff_deg), 180) - 90);
+figure;
+plot(1:length(phase_diff_deg),phase_diff_deg)
+%% producto escalar normalizado
+% Normalizar las componentes
+I_norm = I / sqrt(sum(I.^2));
+Q_norm = Q / sqrt(sum(Q.^2));
+
+% Producto escalar (debería ser 0 para ortogonalidad perfecta)
+dot_product = I_norm .* Q_norm;
+
+% Ortogonalidad instantánea
+ortogonality_instant = abs(dot_product);
+
+% Ángulo entre vectores
+angle_between = acos(abs(dot_product)) * 180/pi;
+
+figure;
+plot(1:length(angle_between),angle_between)
 %% evaluacion de varianzas, magnitud de error y error de phase
 v_in = var(input);
 v_rx_cfo = var(out_cfo);
