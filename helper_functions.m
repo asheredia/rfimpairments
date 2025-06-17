@@ -145,7 +145,7 @@ function plot_psd(fs, signal1, signal2, window, overlap, nfft, labels)
     legend('show'); % Display legend
 end
 
-function rx_signal = apply_rician_channel(signal, fs, fc, v, TDL_D_nd, TDL_D_pow, DS_desired, K_desired)
+function rx_signal = apply_rician_channel(signal, fs, fc, v, TDL_D_nd, TDL_D_pow, DS_desired, K_desired, seed)
     % APPLY_RICIAN_CHANNEL - Applies a Rician fading channel to the input signal
     % Inputs:
     %   signal - Input signal (e.g., input_tx)
@@ -180,9 +180,13 @@ function rx_signal = apply_rician_channel(signal, fs, fc, v, TDL_D_nd, TDL_D_pow
     fpS = 0.7 * fD; % Doppler shift for LOS path
     K = 10.^(K_desired / 10); % Linear K factor
     
-    % Configure Rician channel with unique seed
-    seed_channel = randi(2^31 - 1);
-    rng(seed_channel); % Set random seed for reproducibility
+    % Configure Rician channel with unique seed (or specified by user)
+    if strcmp(seed, 'auto')
+        rng(randi(2^31 - 1));
+    else
+        rng(seed);
+    end
+
     ricianChan = comm.RicianChannel( ...
         'SampleRate', fs, ... % Sampling frequency
         'KFactor', K, ... % Linear K factor
@@ -205,7 +209,7 @@ function rx_signal = apply_rician_channel(signal, fs, fc, v, TDL_D_nd, TDL_D_pow
     clear('ricianChan'); % Release channel object
 end
 
-function rx_signal = apply_rayleigh_channel(signal, fs, fc, v, norm_delays, gains_dB, DS_desired)
+function rx_signal = apply_rayleigh_channel(signal, fs, fc, v, norm_delays, gains_dB, DS_desired, seed)
     % APPLY_RAYLEIGH_CHANNEL - Applies a Rayleigh fading channel to the input signal
     % Inputs:
     %   signal - Input signal (e.g., input_tx)
@@ -226,9 +230,13 @@ function rx_signal = apply_rayleigh_channel(signal, fs, fc, v, norm_delays, gain
     c = physconst('LightSpeed'); % Speed of light (m/s)
     fD = v * fc / (c * 3.6); % Maximum Doppler shift (Hz)
     
-    % Configure Rayleigh channel with unique seed
-    seed_channel = randi(2^31 - 1);
-    rng(seed_channel); % Set random seed for reproducibility
+    % Configure Rayleigh channel with unique seed (or specified by user)
+    if strcmp(seed, 'auto')
+        rng(randi(2^31 - 1));
+    else
+        rng(seed);
+    end
+
     rayChan = comm.RayleighChannel( ...
         'SampleRate', fs, ... % Sampling frequency
         'MaximumDopplerShift', fD, ... % Maximum Doppler shift
@@ -243,6 +251,11 @@ function rx_signal = apply_rayleigh_channel(signal, fs, fc, v, norm_delays, gain
     rx_signal = rayChan(signal); % Pass signal through Rayleigh channel
     fprintf('Señal pasada por el canal Rayleigh en %.2f segundos\n', toc); % Log processing time
     
+    % Verificar potencia
+    rx_power = mean(abs(rx_signal).^2);
+    tx_power = mean(abs(signal).^2);
+    disp(['Relación potencia rx/tx: ', num2str(rx_power / tx_power)]);
+
     % Clean up
     clear('rayChan'); % Release channel object
 end
@@ -286,24 +299,34 @@ function [snr_windowed, snr_inst] = calculate_snr(signal, noise, mask, window_si
         pow_noise = mean(abs(window_noise).^2); % Mean noise power
         snr_windowed(i) = 10*log10(pow_signal / pow_noise); % Windowed SNR in dB
     end
+    disp(['SNR inst min: ', num2str(min(snr_inst)), ', max: ', num2str(max(snr_inst))]);
+    disp(['SNR inst min (windowed): ', num2str(min(snr_windowed)), ', max: ', num2str(max(snr_windowed)), ', mean: ' num2str(mean(snr_windowed))]);
 end
 
-function [rx_n, noise] = apply_snr(signal_tx, signal_rx, snr_db, mask)
+function [rx_n, noise] = apply_snr(signal_tx, signal_rx, snr_db, mask, seed)
     % APPLY_SNR - Scales signal and adds AWGN to achieve desired SNR
     % Inputs:
     %   signal_tx - Transmitted signal (reference)
     %   signal_rx - Received signal
     %   snr_db - Desired SNR (dB)
     %   mask - Indices for signal masking
+    %   seed - Random seed ('auto' or fixed number)
     % Outputs:
     %   rx_n - Signal with added AWGN
     %   noise - Generated noise vector
     
+    % Set random number generator seed
+    if strcmp(seed, 'auto')
+        rng(randi(2^31 - 1));
+    else
+        rng(seed);
+    end
+
     % Calculate scaling factor based on masked signal powers
     tx_power = mean(abs(signal_tx(mask)).^2); % Transmitted signal power
     rx_power = mean(abs(signal_rx(mask)).^2); % Received signal power
     a = sqrt(tx_power / rx_power); % Scaling factor
-    % disp(["Aplying scaling factor: " num2str(a)]); % Log scaling factor
+    disp(['Applying scaling factor: ', num2str(a)]); % Log scaling factor
     rx_scaled = a * signal_rx; % Scale received signal
     
     % Calculate noise power for desired SNR
@@ -311,4 +334,5 @@ function [rx_n, noise] = apply_snr(signal_tx, signal_rx, snr_db, mask)
     n_power = s_power / 10^(snr_db / 10); % Noise power for desired SNR
     noise = sqrt(n_power / 2) * (randn(1, length(signal_rx)) + 1j * randn(1, length(signal_rx))).'; % Generate complex AWGN
     rx_n = rx_scaled + noise; % Add noise to received signal
+    disp(['tx_p:', num2str(tx_power), ', rx_p:', num2str(rx_power), ', s_p:', num2str(s_power), ', n_p:', num2str(n_power)])
 end
