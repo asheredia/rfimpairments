@@ -156,6 +156,7 @@ function rx_signal = apply_rician_channel(signal, fs, fc, v, TDL_D_nd, TDL_D_pow
     %   TDL_D_pow - Path gain vector (dB)
     %   DS_desired - Desired RMS delay spread (seconds, e.g., 1000e-9)
     %   K_desired - Desired K factor (dB, e.g., 6)
+    %   seed - Random seed ('auto' or fixed number)
     % Outputs:
     %   rx_signal - Signal after Rician channel effects
     
@@ -219,6 +220,7 @@ function rx_signal = apply_rayleigh_channel(signal, fs, fc, v, norm_delays, gain
     %   norm_delays - Normalized delay vector (in units of delay spread)
     %   gains_dB - Path gain vector (dB)
     %   DS_desired - Desired RMS delay spread (seconds, e.g., 1000e-9)
+    %   seed - Random seed ('auto' or fixed number)
     % Outputs:
     %   rx_signal - Signal after Rayleigh channel effects
     
