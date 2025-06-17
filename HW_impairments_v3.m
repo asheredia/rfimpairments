@@ -46,15 +46,15 @@ fs = 2e6;
 
 %% -----------------HW Impairments - Simulation Parameters--------------------
 % Define parameters for hardware impairments simulation
-ppm = 5; % Carrier Frequency Offset (CFO) in parts per million (ppm)
+ppm = 0.5; % Carrier Frequency Offset (CFO) in parts per million (ppm)
 fc = 915e6; % Carrier frequency in Hz
 offset = fc * ppm * 1e-6; % Calculated CFO in Hz based on ppm and carrier frequency
-ampImb = 5; % Amplitude imbalance in dB for IQ imbalance simulation
-phImb = 15; % Phase mismatch in degrees for IQ imbalance simulation
+ampImb = 1; % Amplitude imbalance in dB for IQ imbalance simulation
+phImb = 1; % Phase mismatch in degrees for IQ imbalance simulation
 % phNzLevel = [-85 -118 -125 -145]; % Phase noise levels in dBc/Hz at specified frequency offsets
 % pnHzFreqOff = [1e3 9.5e3 19.5e3 195e3]; % Frequency offsets in Hz where phase noise is applied
-phNzLevel = [-101 -105 -106 -109]; % Phase noise levels in dBc/Hz at specified frequency offsets
-pnHzFreqOff = [1e3 5e3 10e3 100e3]; % Frequency offsets in Hz where phase noise is applied
+phNzLevel = [-65 -85 -105 -125]; % Phase noise levels in dBc/Hz at specified frequency offsets
+pnHzFreqOff = [100 1e3 10e3 100e3]; % Frequency offsets in Hz where phase noise is applied
 % phNzLevel = -90; % Commented: Scalar phase noise level in dBc/Hz (alternative option)
 % pnHzFreqOff = 1e3; % Commented: Scalar frequency offset in Hz (alternative option)
 
@@ -135,14 +135,14 @@ end
 
 %% -------------Parallel Processing with Parfor-------------
 % Process files in parallel using parfor for acceleration
-% parpool("Processes", 20); % Commented: Initialize parallel pool with 20 workers
+parpool("Processes", 14); % Commented: Initialize parallel pool with 20 workers
 % Initialize cell arrays to store results
 num_files = size(file_list, 1); % Number of files to process
 senial_cell = cell(num_files, 1); % Cell array for processed signals
 clean_signals = cell(num_files, 1); % Cell array for clean (masked) signals
 filename_cell = cell(num_files, 1); % Cell array for output filenames
 output_dir = '/media/wicomtec/Datos2/DATASET UPC-LPWAN-1/RAW/muestras'; % Output directory
-rng(2025);
+noise_seed = 2025;
 % Process files in parallel
 snr_db = 20; % SNR in dB for AWGN application
 parfor i = 1:num_files
@@ -165,23 +165,23 @@ parfor i = 1:num_files
     %     fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, K_dB);
 
     % Scale signal and apply AWGN
-    [y1, ~] = helper_functions('apply_snr', input_tx, input_tx, snr_db, mascara);
+    [y1, ~] = helper_functions('apply_snr', input_tx, input_tx, snr_db, mascara, noise_seed);
 
     % Commented: Apply CFO to the signal (disabled)
     % rx_chan_cfo = frequencyOffset(y1, fs, offset);
     % rx_chan_cfo_act = rx_chan_cfo(mascara);
 
     % Commented: Apply phase noise to the signal (disabled)
-    % pnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
-    % rx_chan_phn = pnoise(y1);
-    % rx_chan_phn_act = rx_chan_phn(mascara);
+    pnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
+    rx_chan_phn = pnoise(y1);
+    rx_chan_phn_act = rx_chan_phn(mascara);
 
     % Apply IQ imbalance to the signal
-    rx_chan_iqi = iqimbal(y1, ampImb, phImb);
-    rx_chan_iqi_act = rx_chan_iqi(mascara); % Apply mask to IQ-imbalanced signal
+    % rx_chan_iqi = iqimbal(y1, ampImb, phImb);
+    % rx_chan_iqi_act = rx_chan_iqi(mascara); % Apply mask to IQ-imbalanced signal
 
     % Limit signal to 5M samples
-    senial = rx_chan_iqi_act(1:10000000);
+    senial = rx_chan_phn_act(1:10000000);
 
     % ONLY USE WITH PHASE NOISE:
     % ruido_fase = unwrap(angle(rx_chan_phn_act)) - unwrap(angle(input_tx(mascara)));
@@ -190,7 +190,7 @@ parfor i = 1:num_files
     % disp(['Phase noise mean power for: ' var_name ' -> ' num2str(var(ruido_fase)) ' rad^2'])
 
     % Generate output filename
-    save_filename = fullfile(output_dir, strrep(mat_file, '.mat', '_hw_iqi.mat'));
+    save_filename = fullfile(output_dir, strrep(mat_file, '.mat', '_hw_phn.mat'));
 
     % Store results in cell arrays
     cl = input_tx(mascara); % Apply mask to clean signal
@@ -215,15 +215,25 @@ end
 % Commented: Clear cell arrays to free memory
 % clear senial_cell filename_cell;
 
+%% Calculate AWGN for a clean signal at a given index (to compare)
+rng(noise_seed);
+snr_db = 20;
+s_power = var(clean_signals{idx});
+n_power = s_power / 10^(snr_db/10);
+noise = sqrt(n_power/2)* (randn(1,length(clean_signals{idx})) + 1j*randn(1,length(clean_signals{idx})));
+y = clean_signals{idx} + noise.';
 %% Plotting
+idx = 36;
 % Plot time and phase comparison for a specific signal pair
-helper_functions('plot_time_phase', clean_signals{36}, senial_cell{36}, ...
+helper_functions('plot_time_phase', y, senial_cell{idx}, ...
     ['Canal AWGN ' num2str(snr_db) ' dB'], 5000:5500, fs, false); % Plot samples 5000 to 6000
 %% PSD Plots
 window = 1024;
 overlap = window/2;
 nfft=1024;
-helper_functions('plot_psd',fs, clean_signals{36}, senial_cell{36}, window, overlap, nfft, {'Original', 'Impaired signal'});
+helper_functions('plot_psd',fs, y, senial_cell{idx}, window, overlap, nfft, {'Signal with AWGN', 'Impaired + AWGN signal'});
 %% Matlab spectrogram with SpectrumAnalyzer
 sa = helper_functions('nuevoanalizadorSpec',fs, ...
-    clean_signals{36}, senial_cell{36}, {'Input signal', 'Impaired signal'});
+    y, senial_cell{36}, {'Signal with AWGN', 'Impaired + AWGN signal'});
+%% Constellations (useful for IQ imbalance)
+helper_functions('constelaciones',y, senial_cell{idx}, 'AWGN + IQI', 100000);
