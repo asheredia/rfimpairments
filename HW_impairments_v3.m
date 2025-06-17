@@ -51,10 +51,8 @@ fc = 915e6; % Carrier frequency in Hz
 offset = fc * ppm * 1e-6; % Calculated CFO in Hz based on ppm and carrier frequency
 ampImb = 1; % Amplitude imbalance in dB for IQ imbalance simulation
 phImb = 1; % Phase mismatch in degrees for IQ imbalance simulation
-% phNzLevel = [-85 -118 -125 -145]; % Phase noise levels in dBc/Hz at specified frequency offsets
-% pnHzFreqOff = [1e3 9.5e3 19.5e3 195e3]; % Frequency offsets in Hz where phase noise is applied
-phNzLevel = [-65 -85 -105 -125]; % Phase noise levels in dBc/Hz at specified frequency offsets
-pnHzFreqOff = [100 1e3 10e3 100e3]; % Frequency offsets in Hz where phase noise is applied
+phNzLevel = [-85 -118 -125 -145]; % Phase noise levels in dBc/Hz at specified frequency offsets
+pnHzFreqOff = [1e3 9.5e3 19.5e3 195e3]; % Frequency offsets in Hz where phase noise is applied
 % phNzLevel = -90; % Commented: Scalar phase noise level in dBc/Hz (alternative option)
 % pnHzFreqOff = 1e3; % Commented: Scalar frequency offset in Hz (alternative option)
 
