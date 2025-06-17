@@ -20,7 +20,8 @@ pnHzFreqOff = 10e3; % Offset de frecuencia para ruido de fase (Hz)
 %% ----------Parametros de canal--------------
 % generales
 DS_desired = 300e-9;
-v_kmh = 10;
+v_kmh = 10; 
+channel_seed = 2025; % 'auto' o valor fijo
 % Parámetros del canal Rician
 TDL_D_nd = [0, 0.035, 0.612, 1.363, 1.405, 1.804, 2.596, 1.775, ...
             4.042, 7.937, 9.424, 9.708, 12.525];
@@ -78,7 +79,8 @@ helper_functions('plot_time_phase',...
 %        Aplicar hardware impairments en RX
 %  >>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<
 %% -----------SEÑAL SOBRE CANAL AWGN------------
-rng(123);
+noise_seed = 2025;
+rng(noise_seed);
 snr_db = 15;
 s_power = var(input);
 n_power = s_power / 10^(snr_db/10);
@@ -87,27 +89,27 @@ y = input_tx + noise.';
 rx_awgn_act = y(mascara);
 %% -----------SEÑAL SOBRE CANAL RICIAN---------
 rx_Rician = helper_functions('apply_rician_channel', input_tx, fs,...
-    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, K_dB);
+    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, K_dB, channel_seed);
 % escalar señal y aplicar awgn
 snr_db = 15;
-[y1, w1] = helper_functions('apply_snr', input_tx, rx_Rician, snr_db, mascara);
+[y1, w1] = helper_functions('apply_snr', input_tx, rx_Rician, snr_db, mascara, noise_seed);
 
 rx_Rician6 = helper_functions('apply_rician_channel', input_tx, fs,...
-    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 6);
+    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 6, channel_seed);
 % escalar señal y aplicar awgn
-[y1_6, w1_6] = helper_functions('apply_snr', input_tx, rx_Rician6, snr_db, mascara);
+[y1_6, w1_6] = helper_functions('apply_snr', input_tx, rx_Rician6, snr_db, mascara, noise_seed);
 
 rx_Rician20 = helper_functions('apply_rician_channel', input_tx, fs,...
-    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 20);
+    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 20, channel_seed);
 % escalar señal y aplicar awgn
-[y1_20, w1_20] = helper_functions('apply_snr', input_tx, rx_Rician20, snr_db, mascara);
+[y1_20, w1_20] = helper_functions('apply_snr', input_tx, rx_Rician20, snr_db, mascara, noise_seed);
 % rx_rician_act = y1(mascara);
 %% -----------SEÑAL SOBRE CANAL RAYLEIGH---------
 rx_Rayleigh = helper_functions('apply_rayleigh_channel', input_tx, fs,...
-    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired);
+    fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 2025);
 % escalar señal y aplicar awgn (y[n] = x[n]*h[n] + w[n])
 snr_db = 15;
-[y2, w2] = helper_functions('apply_snr', input_tx, rx_Rayleigh, snr_db, mascara);
+[y2, w2] = helper_functions('apply_snr', input_tx, rx_Rayleigh, snr_db, mascara, noise_seed);
 rx_rayleigh_act = y2(mascara);
 %% --------VISUALIZAR RX----------
 % awgn
@@ -124,7 +126,7 @@ helper_functions('plot_time_phase',input,rx_rician_act,['Rician ' num2str(K_dB) 
 clear sa;
 sa = helper_functions('nuevoanalizadorSpec',fs, ...
     input_tx, y2, {'Input signal', 'Rayleigh Channel signal'});
-helper_functions('plot_time_phase',input,rx_rayleigh_act,['Rayleigh DS = ' num2str(DS_desired*1e9) ' ns, AWGN'], 1:5000, fs, true);
+helper_functions('plot_time_phase',input,rx_rayleigh_act,['Rayleigh DS = ' num2str(DS_desired*1e9) ' ns, AWGN'], 1:1000000, fs, true);
 %% --------CANAL + CFO----------
 rx_chan_cfo = frequencyOffset(y1, fs, offset);
 rx_chan_cfo_act = rx_chan_cfo(mascara);
@@ -190,11 +192,16 @@ helper_functions('constelaciones',input, rx_chan_iqi_act, 'Channel + IQI', 100);
 helper_functions('constelaciones',input, rx_chan_phn_act, 'Channel + PhN', 100);
 %% señal piloto
 sinewave = dsp.SineWave( ...
-    Frequency=10000, ...
-    SampleRate=fs/10, ...
+    Frequency=100000, ...
+    SampleRate=fs, ...
     SamplesPerFrame=2e6, ...
     ComplexOutput=true);
 x = sinewave();
+%%
+phNzLevel = [-85 -118 -125 -145]; % Phase noise levels in dBc/Hz at specified frequency offsets
+pnHzFreqOff = [1e3 9.5e3 19.5e3 195e3]; % Frequency offsets in Hz where phase noise is applied
+pnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
+distorted = pnoise(x);
 %% aplicando iq imbalance a una señal de banda ancha con portadora
 tx = frequencyOffset(input_tx, fs, 200e3);
 rx = iqimbal(tx, 3, 10);
@@ -202,7 +209,7 @@ rx = iqimbal(tx, 3, 10);
 window = 1024;
 overlap = window/2;
 nfft=1024;
-helper_functions('plot_psd',fs, input, y1_6(mascara), window, 0, nfft, {'Original', 'rayleigh+awgn'});
+helper_functions('plot_psd',fs, x, distorted, window, 0, nfft, {'Original', 'Distorted'});
 %% ESTIMACION DE IQ IMBALANCE MATLAB
 hicomp = comm.IQImbalanceCompensator('CoefficientOutputPort',true);
 [compSig, coef] = step(hicomp, rx_chan_iqi);
@@ -237,10 +244,10 @@ fprintf('EVM: %.2f%%\n', evm);
 %% ----------------------SNR INSTANTANEA-------------------------
 % snr instantanea tras canal AWGN + Fading Channel
 [snr_inst, ins] = helper_functions('calculate_snr', input_tx, noise.', mascara, 128);
-[snr_inst_y13, ~] = helper_functions('calculate_snr', y1, w1, mascara, 128);
-[snr_inst_y6, ~] = helper_functions('calculate_snr', y1_6, w1_6, mascara, 128);
-[snr_inst_y20, ~] = helper_functions('calculate_snr', y1_20, w1_20, mascara, 128);
-[snr_inst_y2, ~] = helper_functions('calculate_snr', y2, w2, mascara, 128);
+[snr_inst_y13, ~] = helper_functions('calculate_snr', rx_Rician, w1, mascara, 128);
+[snr_inst_y6, ~] = helper_functions('calculate_snr', rx_Rician6, w1_6, mascara, 128);
+[snr_inst_y20, ~] = helper_functions('calculate_snr', rx_Rician20, w1_20, mascara, 128);
+[snr_inst_y2, ~] = helper_functions('calculate_snr', rx_Rayleigh, w2, mascara, 128);
 %%
 figure;
 histogram(snr_inst, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
