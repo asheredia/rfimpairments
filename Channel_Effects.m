@@ -61,7 +61,7 @@ rx_Rician20 = helper_functions('apply_rician_channel', input_tx, fs,...
 [y1_20, w1_20] = helper_functions('apply_snr', input_tx, rx_Rician20, snr_db, mascara, noise_seed);
 % rx_rician_act = y1(mascara);
 %% -----------SEÑAL SOBRE CANAL RAYLEIGH---------
-[rx_Rayleigh, ganancias] = helper_functions('apply_rayleigh_channel', input_tx, fs,...
+rx_Rayleigh = helper_functions('apply_rayleigh_channel', input_tx, fs,...
     fc, v_kmh, TDL_C_nd, TDL_C_pow, DS_desired, 2025);
 % escalar señal y aplicar awgn (y[n] = x[n]*h[n] + w[n])
 snr_db = 15;
@@ -193,8 +193,8 @@ mean_mag = mean(abs(ganancias));
 std_mag = std(abs(ganancias));
 %%
 figure;
-for m = 1:size(ganancias, 2)/6
-    subplot(1, size(ganancias, 2)/6, m);
+for m = 1:floor(size(ganancias, 2)/3)
+    subplot(1, floor(size(ganancias, 2)/3), m);
     histogram(abs(ganancias(:, m)), 50);
     title(['Distribución de magnitud - Trayectoria ', num2str(m)]);
     xlabel('Magnitud');
