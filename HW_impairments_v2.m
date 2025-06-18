@@ -1,9 +1,9 @@
 %% ---------------------HARDWARE IMPAIRMENTS-----------------------
-clear all; close all;
+% clear all; close all;
 
 % Cargar señal
-signal = load('MR_OFDM2_MCS5_v1.mat');
-input_tx = signal.MR_OFDM2_MCS5_v1;
+signal = load('LoRa_SF12_v1.mat');
+input_tx = signal.LoRa_SF12_v1;
 fs = 2e6;
 mascara = find(abs(input_tx)>=0.005);
 input = input_tx(mascara);
@@ -198,18 +198,54 @@ sinewave = dsp.SineWave( ...
     ComplexOutput=true);
 x = sinewave();
 %%
-phNzLevel = [-85 -118 -125 -145]; % Phase noise levels in dBc/Hz at specified frequency offsets
-pnHzFreqOff = [1e3 9.5e3 19.5e3 195e3]; % Frequency offsets in Hz where phase noise is applied
+phNzLevel = -75; % Phase noise levels in dBc/Hz at specified frequency offsets
+pnHzFreqOff = 10e3; % Frequency offsets in Hz where phase noise is applied
 pnoise = comm.PhaseNoise('Level', phNzLevel, 'FrequencyOffset', pnHzFreqOff, 'SampleRate', fs);
 distorted = pnoise(x);
 %% aplicando iq imbalance a una señal de banda ancha con portadora
 tx = frequencyOffset(input_tx, fs, 200e3);
 rx = iqimbal(tx, 3, 10);
+%%
+helper_functions('plot_time_phase',...
+    input, frequencyOffset(input, fs, 5*915), 'Phase noise:', 5000:5500, fs, false);
+%%
+function constelacionesr(input, output1, output2, output3, output4, title_str, samples)
+    % CONSTELACIONES - Plots a single constellation diagram with input and three output signals overlaid
+    % Inputs:
+    %   input - Original input signal
+    %   output1 - First processed output signal
+    %   output2 - Second processed output signal
+    %   output3 - Third processed output signal
+    %   title_str - Title string for the plot
+    %   samples - Number of samples to plot
+    input = input(1:samples); % Limit input signal to specified samples
+    output1 = output1(1:samples); % Limit first output signal to specified samples
+    output2 = output2(1:samples); % Limit second output signal to specified samples
+    output3 = output3(1:samples); % Limit third output signal to specified samples
+    output4 = output4(1:samples);
+    
+    figure;
+    hold on; % Enable overlaying plots
+    plot(real(output1), imag(output1),'Color', '#A2142F', 'DisplayName', ['Salida 1 con ', title_str], 'LineWidth',3);
+    plot(real(output2), imag(output2), 'Color', '#77AC30', 'DisplayName', ['Salida 2 con ', title_str], 'LineWidth',3);
+    plot(real(output3), imag(output3), 'Color', '#7E2F8E', 'DisplayName', ['Salida 3 con ', title_str], 'LineWidth',3);
+    plot(real(output4), imag(output4), 'Color', '#4DBEEE', 'DisplayName', ['Salida 4 con ', title_str], 'LineWidth',3);
+    plot(real(input), imag(input), 'Color', '#0072BD', 'DisplayName', 'Señal Original', 'LineWidth',4);
+    
+    hold off;
+    
+    title(['Constelación: ', title_str]);
+    xlabel('I'); ylabel('Q');
+    grid on;
+    legend('show'); % Display legend to distinguish signals
+    % axis([-0.05 0.05 -0.05 0.05]); % Commented: Fixed axis limits
+end
+constelacionesr(x, iqimbal(x,1,1), iqimbal(x,1,5), iqimbal(x,3,10), iqimbal(x,5,15), 'IQI', 10000);
 %% --------------------Comparacion de PSDs-----------------------
 window = 1024;
 overlap = window/2;
 nfft=1024;
-helper_functions('plot_psd',fs, x, distorted, window, 0, nfft, {'Original', 'Distorted'});
+helper_functions('plot_psd',fs, x, iqimbal(x, 1, 1), window, 0, nfft, {'Original', 'Distorted'});
 %% ESTIMACION DE IQ IMBALANCE MATLAB
 hicomp = comm.IQImbalanceCompensator('CoefficientOutputPort',true);
 [compSig, coef] = step(hicomp, rx_chan_iqi);
