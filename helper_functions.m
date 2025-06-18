@@ -21,7 +21,7 @@ function varargout = helper_functions(func_name, varargin)
         case 'apply_snr'
             [varargout{1}, varargout{2}] = apply_snr(varargin{:}); % Call SNR application function
         case 'apply_rayleigh_channel'
-            varargout{1} = apply_rayleigh_channel(varargin{:}); % Call Rayleigh channel application function
+            [varargout{1}, varargout{2}] = apply_rayleigh_channel(varargin{:}); % Call Rayleigh channel application function
         otherwise
             error('Funcion desconocida: %s', func_name); % Throw error for unknown function
     end
@@ -210,7 +210,7 @@ function rx_signal = apply_rician_channel(signal, fs, fc, v, TDL_D_nd, TDL_D_pow
     clear('ricianChan'); % Release channel object
 end
 
-function rx_signal = apply_rayleigh_channel(signal, fs, fc, v, norm_delays, gains_dB, DS_desired, seed)
+function [rx_signal, gains_dB] = apply_rayleigh_channel(signal, fs, fc, v, norm_delays, gains_dB, DS_desired, seed)
     % APPLY_RAYLEIGH_CHANNEL - Applies a Rayleigh fading channel to the input signal
     % Inputs:
     %   signal - Input signal (e.g., input_tx)
@@ -244,13 +244,13 @@ function rx_signal = apply_rayleigh_channel(signal, fs, fc, v, norm_delays, gain
         'MaximumDopplerShift', fD, ... % Maximum Doppler shift
         'PathDelays', TDL_delays, ... % Scaled path delays
         'AveragePathGains', TDL_power, ... % Path gains
-        'PathGainsOutputPort', false, ... % Disable path gains output
+        'PathGainsOutputPort', true, ... % Disable path gains output
         'NormalizePathGains', false, ... % Disable automatic gain normalization
         'Visualization', 'Off'); % Disable visualization
     
     % Apply channel to signal
     tic;
-    rx_signal = rayChan(signal); % Pass signal through Rayleigh channel
+    [rx_signal, gains_dB] = rayChan(signal); % Pass signal through Rayleigh channel
     fprintf('Señal pasada por el canal Rayleigh en %.2f segundos\n', toc); % Log processing time
     
     % Verificar potencia
