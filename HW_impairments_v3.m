@@ -133,7 +133,7 @@ end
 
 %% -------------Parallel Processing with Parfor-------------
 % Process files in parallel using parfor for acceleration
-parpool("Processes", 14); % Commented: Initialize parallel pool with 20 workers
+parpool("Processes", 8); % Commented: Initialize parallel pool with 20 workers
 % Initialize cell arrays to store results
 num_files = size(file_list, 1); % Number of files to process
 senial_cell = cell(num_files, 1); % Cell array for processed signals

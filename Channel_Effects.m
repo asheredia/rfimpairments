@@ -11,7 +11,7 @@ input = input_tx(mascara);
 %% ----------Parametros de canal--------------
 % generales
 fc = 915e6;
-DS_desired = 300e-9;
+DS_desired = 100e-9;
 v_kmh = 10; 
 channel_seed = 2025; % 'auto' o valor fijo
 % Parámetros del canal Rician
@@ -48,42 +48,50 @@ rx_Rician13 = helper_functions('apply_rician_channel', input_tx, fs,...
     fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, K_dB, channel_seed);
 % escalar señal y aplicar awgn
 snr_db = 15;
-[y1, w1] = helper_functions('apply_snr', input_tx, rx_Rician13, snr_db, mascara, noise_seed);
+[y13, w13] = helper_functions('apply_snr', input_tx, rx_Rician13, snr_db, mascara, noise_seed);
 
-rx_Rician6 = helper_functions('apply_rician_channel', input_tx, fs,...
+rx_Rician06 = helper_functions('apply_rician_channel', input_tx, fs,...
     fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 6, channel_seed);
 % escalar señal y aplicar awgn
-[y1_6, w1_6] = helper_functions('apply_snr', input_tx, rx_Rician6, snr_db, mascara, noise_seed);
+[y06, w06] = helper_functions('apply_snr', input_tx, rx_Rician06, snr_db, mascara, noise_seed);
 
 rx_Rician20 = helper_functions('apply_rician_channel', input_tx, fs,...
     fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 20, channel_seed);
 % escalar señal y aplicar awgn
-[y1_20, w1_20] = helper_functions('apply_snr', input_tx, rx_Rician20, snr_db, mascara, noise_seed);
+[y20, w20] = helper_functions('apply_snr', input_tx, rx_Rician20, snr_db, mascara, noise_seed);
 % rx_rician_act = y1(mascara);
 %% -----------SEÑAL SOBRE CANAL RAYLEIGH---------
 rx_Rayleigh = helper_functions('apply_rayleigh_channel', input_tx, fs,...
     fc, v_kmh, TDL_C_nd, TDL_C_pow, DS_desired, 2025);
 % escalar señal y aplicar awgn (y[n] = x[n]*h[n] + w[n])
 snr_db = 15;
-[y2, w2] = helper_functions('apply_snr', input_tx, rx_Rayleigh, snr_db, mascara, noise_seed);
-rx_rayleigh_act = y2(mascara);
+[yRa, wRa] = helper_functions('apply_snr', input_tx, rx_Rayleigh, snr_db, mascara, noise_seed);
+%rx_rayleigh_act = yRa(mascara);
 %% --------VISUALIZAR RX----------
 % awgn
 clear sa;
 sa = helper_functions('nuevoanalizadorSpec',fs, ...
     input_tx, y, {'Input signal', 'AWGN Channel signal'});
-helper_functions('plot_time_phase',input,rx_awgn_act,['AWGN con SNR ' num2str(snr_db) ' dB'], 1:1000000, fs, true);
+helper_functions('plot_time_phase',input,rx_awgn_act,['AWGN con SNR ' num2str(snr_db) ' dB'], 1:10000000, fs, true);
 %% rician
 clear sa;
 sa = helper_functions('nuevoanalizadorSpec',fs, ...
     input_tx, y1, {'Input signal', 'Rician Channel signal'});
-helper_functions('plot_time_phase',input_tx, rx_Rician6,['Rician ' num2str(K_dB) ' dB + AWGN'], 1:1000000, fs, true);
+helper_functions('plot_time_phase',input, y20(mascara),['Rician ' num2str(K_dB) ' dB + AWGN'], 1:1000, fs, true);
 %% rayleigh
 clear sa;
 sa = helper_functions('nuevoanalizadorSpec',fs, ...
-    input_tx, y2, {'Input signal', 'Rayleigh Channel signal'});
-helper_functions('plot_time_phase',input,rx_rayleigh_act,['Rayleigh DS = ' num2str(DS_desired*1e9) ' ns, AWGN'], 1:1000000, fs, true);
-
+    input_tx, yRa, {'Input signal', 'Rayleigh Channel signal'});
+helper_functions('plot_time_phase',input,yRa(mascara),['Rayleigh DS = ' num2str(DS_desired*1e9) ' ns, AWGN'], 1:1000000, fs, true);
+%% Guardar señal en bloques aleatorios
+M = 4096;
+vector = y06(mascara);
+N = floor(length(vector)/M)*M;
+bloques = reshape(vector(1:N), M, []).';
+% seleccion aleatoria
+rng(2025);
+idx = randperm(size(bloques, 1), 5000);
+IQ_data = bloques(idx,:);
 %% señal piloto
 sinewave = dsp.SineWave( ...
     Frequency=100000, ...
@@ -94,11 +102,11 @@ x = sinewave();
 
 %% ----------------------SNR INSTANTANEA-------------------------
 % snr instantanea tras canal AWGN + Fading Channel
-[snr_inst, ins] = helper_functions('calculate_snr', input_tx, noise.', mascara, 128);
-[snr_inst_y13, ~] = helper_functions('calculate_snr', (y1 - w1), w1, mascara, 128);
-[snr_inst_y6, ~] = helper_functions('calculate_snr', (y1_6 - w1_6), w1_6, mascara, 128);
-[snr_inst_y20, ~] = helper_functions('calculate_snr', (y1_20 - w1_20), w1_20, mascara, 128);
-[snr_inst_y2, ~] = helper_functions('calculate_snr', (y2 - w2), w2, mascara, 128);
+[snr_inst, ins] = helper_functions('calculate_snr', input_tx, noise.', mascara, 4096);
+[snr_inst_y13, ~] = helper_functions('calculate_snr', (y13 - w13), w13, mascara, 4096);
+[snr_inst_y06, ~] = helper_functions('calculate_snr', (y06 - w06), w06, mascara, 4096);
+[snr_inst_y20, ~] = helper_functions('calculate_snr', (y20 - w20), w20, mascara, 4096);
+[snr_inst_yRa, ~] = helper_functions('calculate_snr', (yRa - wRa), wRa, mascara, 4096);
 %%
 figure;
 histogram(snr_inst, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
@@ -110,7 +118,7 @@ xline(snr_db, 'r--');
 hold on;
 histogram(snr_inst_y20, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
 histogram(snr_inst_y13, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
-histogram(snr_inst_y6, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
+histogram(snr_inst_y06, (snr_db -15):0.1:(snr_db+15), 'Normalization','percentage','EdgeColor','none');
 % hold on;
 % histogram(snr_inst_y2, (snr_db -15):0.1:(snr_db+15), 'Normalization','pdf','EdgeColor','none');
 legend('Sólo AWGN', 'SNR media' ,'Rician K 20dB + AWGN', 'Rician K 13.3dB + AWGN', 'Rician K 6dB + AWGN');
@@ -122,7 +130,7 @@ figure;
 [x1, f1] = ksdensity(snr_inst, linspace(snr_db - 17, snr_db + 17, 1000));
 [x2, f2] = ksdensity(snr_inst_y20, linspace(snr_db - 17, snr_db + 17, 1000));
 [x3, f3] = ksdensity(snr_inst_y13, linspace(snr_db - 17, snr_db + 17, 1000));
-[x4, f4] = ksdensity(snr_inst_y6, linspace(snr_db - 17, snr_db + 17, 1000));
+[x4, f4] = ksdensity(snr_inst_y06, linspace(snr_db - 17, snr_db + 17, 1000));
 
 % Plot smooth curves with distinct colors
 plot(f1, x1, 'k', 'LineWidth', 2); % Blue
@@ -146,7 +154,7 @@ hold off;
 figure;
 % Compute and plot kernel density estimates
 [xa, fa] = ksdensity(snr_inst, linspace(snr_db - 17, snr_db + 17, 1000));
-[xb, fb] = ksdensity(snr_inst_y2, linspace(snr_db - 17, snr_db + 17, 1000));
+[xb, fb] = ksdensity(snr_inst_yRa, linspace(snr_db - 17, snr_db + 17, 1000));
 
 % Plot smooth curves with distinct colors
 plot(fa, xa, 'k', 'LineWidth', 2); % Blue
@@ -167,8 +175,8 @@ hold off;
 %% -----------RMS Delay Spread Calculation-------------
 
 % Gain paths into a linear scale
-TDL_pow_l = 10.^(TDL_C_pow / 10);
-TDL_delays = TDL_C_nd * DS_desired;
+TDL_pow_l = 10.^(TDL_D_pow / 10);
+TDL_delays = TDL_D_nd * DS_desired;
 fD = (1/3.6) * v_kmh * fc / physconst('LightSpeed');
 % Mean delay
 tau_m = sum(TDL_delays .* TDL_pow_l) / sum(TDL_pow_l);
@@ -200,3 +208,77 @@ for m = 1:floor(size(ganancias, 2)/3)
     xlabel('Magnitud');
     ylabel('Frecuencia');
 end
+
+%%
+[acf, lags] = xcorr(abs(ganancias(:, 1)), 'normalized');
+coherence_time = lags(find(acf < 0.5, 1)) / fs; % Tiempo donde la autocorrelación cae por debajo de 0.5
+disp(['Tiempo de coherencia aproximado (segundos): ', num2str(coherence_time)]);
+%%
+max_delay = max(TDL_D_nd * DS_desired);
+coherence_bw = 1 / max_delay;
+disp(['Ancho de banda de coherencia aproximado (Hz): ', num2str(coherence_bw)]);
+
+%% PASAR TODAS LAS SEÑALES POR CANAL
+%% -------------Parallel Processing with Parfor-------------
+% Process files in parallel using parfor for acceleration
+% parpool("Processes", 3); % Commented: Initialize parallel pool with 20 workers
+% Initialize cell arrays to store results
+num_files = size(file_list, 1); % Number of files to process
+senial_cell = cell(num_files, 1); % Cell array for processed signals
+clean_signals = cell(num_files, 1); % Cell array for clean (masked) signals
+filename_cell = cell(num_files, 1); % Cell array for output filenames
+output_dir = '/media/wicomtec/Datos2/DATASET UPC-LPWAN-1/RAW/muestras'; % Output directory
+noise_seed = 2025;
+% Process files in parallel
+snr_db = 15; % SNR in dB for AWGN application
+parfor i = 1:num_files
+    % Load signal from .mat file
+    mat_file = file_list{i, 1}; % Retrieve .mat file name
+    var_name = file_list{i, 2}; % Retrieve variable name inside .mat file
+    signal_data = load(mat_file, var_name); % Load signal data
+    input_tx = signal_data.(var_name); % Extract signal
+
+    % Display processing information
+    disp(['Procesando archivo: ', mat_file, ' con ', num2str(length(input_tx)), ' muestras']);
+
+    % Apply amplitude mask to filter samples
+    mascara = abs(input_tx) >= 0.005;
+
+    % disp(['Muestras de señal útil: ', num2str(length(mascara))])
+
+    % Commented: Apply Rician channel model (disabled)
+    rx_rician = helper_functions('apply_rician_channel', input_tx, fs, ...
+        fc, v_kmh, TDL_D_nd, TDL_D_pow, DS_desired, 6, channel_seed);
+
+    % Scale signal and apply AWGN
+    [y1, ~] = helper_functions('apply_snr', input_tx, rx_rician, snr_db, mascara, noise_seed);
+    y1_act = y1(mascara);
+
+    % Limit signal to 5M samples
+    senial = y1_act(1:10000000);
+
+    % Generate output filename
+    save_filename = fullfile(output_dir, strrep(mat_file, '.mat', '_hw_rician.mat'));
+
+    % Store results in cell arrays
+    cl = input_tx(mascara); % Apply mask to clean signal
+    clean_signals{i} = cl(1:10000000); % Store first 10M samples of clean signal
+    senial_cell{i} = senial; % Store processed signal
+    filename_cell{i} = save_filename; % Store output filename
+
+    % Clear variables to free memory
+    % clear signal_data input_tx rx_rician y1 rx_chan_cfo rx_chan_cfo_act senial;
+end
+
+%% Save Files in a Sequential Loop
+% Save processed signals to disk using a standard for loop
+for i = 1:num_files
+    senial = senial_cell{i}; % Retrieve processed signal
+    save_filename = filename_cell{i}; % Retrieve output filename
+    tic % Start timing
+    save(save_filename, 'senial', '-v7.3'); % Save signal in MATLAB v7.3 format
+    toc % Display elapsed time
+    disp(['Guardado: ', save_filename]); % Log save status
+end
+% Commented: Clear cell arrays to free memory
+% clear senial_cell filename_cell;
